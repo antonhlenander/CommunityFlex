@@ -1,0 +1,11 @@
+# Ignore all subdirectories
+*/
+
+# Ignore the .vscode directory
+.vscode/
+
+# Ignore all .env files
+.env
+
+# Include the datahandling directory
+!datahandling/
