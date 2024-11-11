@@ -1,133 +1,109 @@
+from dataclasses import dataclass
 import phantom as ph
 import gymnasium as gym
 import numpy as np
 import pandas as pd
 from phantom.types import AgentID
-from typing import Iterable, Sequence
-from market import Market
-from messages import BuyBid, SellBid, ClearedBid, DummyMsg
+from typing import Iterable, Sequence, Dict
+from messages import BuyBid, SellBid, ClearedSellBid, ClearedBuyBid, DummyMsg
 from datamanager import DataManager
 #from datamanager import DataManager
 
+
 ##############################################################
-# Generator Agent
+# Strategic Community Mediator Agent
+# Learns a dynamic pricing strategy for the local market
 ##############################################################
-class GeneratorAgent(ph.Agent):
-    def __init__(self, agent_id, agent_key, exchange_id, data_manager):
+class StrategicCommunityMediator(ph.StrategicAgent):
+    "Stategic Community Mediator Agent"
+
+    @dataclass(frozen=True)
+    class MediatorView(ph.AgentView):
+            """
+            We expose a view of the grid price, local market price and feed-in price to the agents.
+            """
+            public_info: dict
+
+    def __init__(self, agent_id, data_manager):
         super().__init__(agent_id)
-
-        self.agent_key = agent_key
-
-        # Store the ID of the Exchange that Bids go through
-        self.exchange_id = exchange_id
-
+ 
+        # Store the DataManager to get historical price data
         self.dm: DataManager = data_manager
-        # How much capacity can be supplied at current step and price
-        self.current_production: float = 0
-        self.current_price_pr_MWh: float = 0
 
-        # How much capacity that was sold
-        self.supplied_production: float = 0
+        # Store the current grid price
+        self.current_grid_price: float = 0
+        # Current local price
+        self.current_local_price: float = 0
+        # Feedin tariff
+        self.feedin_tariff: float = 0
 
-        # ...and how much capacity per step that was missed due to not bidding low enough.
-        self.surplus_production: float = 0
+        # Community net loss
+        self.community_net_loss: float = 0
 
-    def generate_messages(self, ctx: ph.Context):
-        if not self.current_production == 0:
-            return [(self.exchange_id, SellBid(self.id, self.current_production, self.current_price_pr_MWh))]
-        
-    @ph.agents.msg_handler(ClearedBid)
-    def handle_cleared_bid(self, _ctx: ph.Context, msg: ph.Message):
-        self.supplied_production += msg.payload.mwh
-        #logger.debug("Generator Agent %s supplies: %s to %s at price %s", self.id, msg.payload.mwh, msg.payload.buyer_id, msg.payload.price)
-
-    def pre_message_resolution(self, ctx: ph.Context):
-        # Reset statistics before message resolution
-        self.supplied_production = 0
-        self.missed_production = 0
-
-    def post_message_resolution(self, ctx: ph.Context):
-        # Compute how much capacity was not sold
-        self.surplus_production = self.current_production - self.supplied_production
-        # Get capacity and price data for NEXT step except for at last step
-        self.current_production = self.dm.get_agent_production(ctx.env_view.current_step, self.agent_key)
-        self.current_price_pr_MWh = self.dm.get_spot_price(ctx.env_view.current_step)
-        
-    def reset(self):
-        # Reset statistics
-        self.supplied_production = 0
-        self.missed_production = 0
-        # Load demand data for first step
-        self.current_production = self.dm.get_agent_production(0, self.agent_key)
-        # Get price data for first step
-        self.current_price_pr_MWh = self.dm.get_spot_price(0)
-
-##############################################################
-# Strategic RL Generator agent 
-# Does not learn bidding! 
-# Learns to adjust current production, sets price from marginal cost
-##############################################################
-class StrategicGeneratorAgent(ph.StrategicAgent):
-    def __init__(self, agent_id, agent_key, exchange_id, data_manager, capacity: float, min_load: float, start_up: float, ramp_rate: float, marginal_cost: float):
-        super().__init__(agent_id)
-
-        # Agent key for data retrieval
-        self.agent_key = agent_key
-        # Store the ID of the Exchange that Bids go through
-        self.exchange_id = exchange_id
-        # Store the DataManager
-        self.dm: DataManager = data_manager
-        # The plant capacity
-        self.capacity = capacity
-        # Minimum load
-        self.min_load = min_load
-        # Start up time
-        self.start_up = start_up
-        # The max increase in production per step (MWh/hour)
-        self.ramp_rate = ramp_rate
-        # Cost of production
-        self.marginal_cost: float = marginal_cost
-
-        # How much the plant is currently producing
-        self.current_production: float = 0
-        
-        # Include demand as observation at some point?
-
-        # Total earnings
-        self.total_earnings: float = 0
-        # How much the plant is currently earning
-        self.current_earnings: float = 0
+        # Community self-sufficiency
+        self.community_self_sufficiency: float = 0
         
         # Include forecast demand data at some point?
         # = [Month, Date, Day, Hour, Cleared Price, Current Production]
         self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(6,))
 
-        # = [Increase in production]
-        # The action space is the increase in production per step, normalized
-        # X / self.ramp_rate = Action
-        #self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,))
+        # 10 price brackets for now
+        self.action_space = gym.spaces.Discrete(10)
 
-        # = 1 = Increase production, 0 = maintain production, -1 = decrease production
-        self.action_space = gym.spaces.Discrete(3, start=-1)
 
+    def view(self, neighbour_id=None) -> ph.View:
+        """@override
+        Create the view for the agents to see the public information.
+        """
+        return self.StrategicCommunicatorView(
+            public_info={
+                "grid_price": self.grid_price, 
+                "local_price": self.local_price, 
+                "feedin_price": self.feedin_price
+            },
+        )
 
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
-        # Adjust production based on ramp rate and capacity limits
-        delta_production = action * self.ramp_rate
-        #price = action[1] * ctx.env_view.MAX_BID_PRICE
-        
-        # Ensure the new production is within valid bounds (min_load <= current_production <= capacity)
-        self.current_production = max(self.min_load, min(self.capacity, self.current_production + delta_production))
-        
-        # Generate a sell bid for the new production level
-        return [(self.exchange_id, SellBid(self.id, self.current_production, self.marginal_cost))]
+        # Set the local price
+        self.current_local_price = float(action) * self.current_grid_price / 10
 
     # 2nd step in a step
     def pre_message_resolution(self, ctx: ph.Context):
         self.satisfied_demand = 0
         self.missed_demand = 0
         self.current_earnings = 0
+
+
+    def handle_batch(
+        self, ctx: ph.Context, batch: Sequence[ph.Message]):
+        """@override
+        We override the method `handle_batch` to consume all the bids messages
+        as one block in order to perform the auction. The batch object contains
+        all the messages that were sent to the actor.
+
+        Note:
+        -----
+        The default logic is to consume each message individually.
+        """
+        buy_bids = []
+        sell_bids = []
+
+        msgs = []
+
+        # Create lists of buy and sell bids
+        for message in batch:
+            if isinstance(message.payload, BuyBid):
+                buy_bids.append(message)
+            elif isinstance(message.payload, SellBid):
+                sell_bids.append(message)
+            else:
+                msgs += self.handle_message(ctx, message)
+
+        if len(buy_bids) > 0 and len(sell_bids) > 0:
+            msgs = self.market_clearing(buy_bids=buy_bids, sell_bids=sell_bids)
+
+        return msgs
 
     # 3rd step in a step
     @ph.agents.msg_handler(ClearedBid)
@@ -177,14 +153,249 @@ class StrategicGeneratorAgent(ph.StrategicAgent):
 
         return scaled_reward
 
-
     def reset(self):
         # Reset statistics
         self.total_earnings = 0
 
 
 ##############################################################
-# Consumer Agent
+# Strategic RL prosumer agent
+##############################################################
+class StrategicProsumerAgent(ph.StrategicAgent):
+    def __init__(self, agent_id, agent_key, mediator_id, data_manager, battery: Dict[str, float], production: Dict[str, float]):
+        super().__init__(agent_id)
+
+        # Store the ID of the community mediator
+        self.mediator = mediator_id
+
+        # Store the DataManager
+        self.dm: DataManager = data_manager
+
+        # Agent properties
+        self.battery_cap = battery["cap"]
+        self.charge_rate = battery["charge_rate"]
+
+        # Agent currents
+        self.current_load: float = 0 
+        self.current_prod: float = 0
+        self.current_charge: float = 0
+        self.current_supply: float = 0
+
+        # Agent constraints
+        self.remain_batt_cap: float = 0
+        self.max_batt_charge: float = 0
+        self.max_batt_discharge: float = 0
+
+        # Accumulated statistics
+        self.acc_local_market_coin: float = 0
+        self.acc_feedin_coin: float = 0
+        self.acc_local_market_cost: float = 0
+        self.acc_grid_market_cost: float = 0
+        self.acc_invalid_actions: int = 0
+        self.acc_grid_interactions: int = 0
+
+        # = [Grid price, Local market price, Feed-in price, 
+        #   Load, PV supply, State of charge, Battery capacity,
+        #   Battery charge/discharge limit, Acc. local market coin, Acc. feed-in coin,
+        #   Acc. lokal market cost, Acc. grid market cost, Acc. number of invalid actions,
+        #   Acc. number of grid interactions]
+        # self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(11,))
+
+        # = {Buy, Sell, Charge, No-op}
+        self.action_space = gym.spaces.Discrete(4)
+
+    @property
+    def observation_space(self):
+        return gym.spaces.Dict(
+            {
+                # Can include type here as well in the future maybe
+                "public_info": gym.spaces.Box(
+                    low=0.0, high=1.0, shape=(3,), dtype=np.float64
+                ),
+                "private_info": gym.spaces.Box(low=0.0, high=1.0, shape=(11,), dtype=np.float64),
+                # "action_mask": gym.spaces.Discrete(4),
+                # "user_age": gym.spaces.Box(low=0.0, high=100., shape=(1,), dtype=np.float64),
+                # "user_zipcode": gym.spaces.Box(low=0.0, high=99999., shape=(1,), dtype=np.float64),
+            }
+        )
+
+    def buy_power(self, ctx: ph.Context):
+        # Check if valid action!
+        # Down the line we can just make the action invalid with action masking
+
+        # Cannot buy power if agent has more supply than it can charge
+        if self.current_supply >= self.max_batt_charge:
+            self.acc_invalid_actions += 1
+            return []
+        # Can only buy the amount of power that agent cannot supply itself, 
+        # bounded by the max amount agent can charge
+        elif self.current_supply > 0 and self.current_supply < self.max_batt_charge:
+            buy_amount = self.max_batt_charge - self.current_supply
+            return [(self.mediator, BuyBid(self.id, buy_amount))]
+        # If negative own supply, agent buys the amount it can charge + its deficit in own supply
+        else:
+            # This case will be if supply is negative or zero
+            # i.e. the subtraction is an addition
+            buy_amount = self.max_batt_charge - self.current_supply
+            return [(self.mediator, BuyBid(self.id, buy_amount))]
+
+    # TODO: this is not done!
+    def sell_power(self):
+        # Check if valid action!
+        # Down the line we can just make the action invalid with action masking
+        # If agent has no excess own supply, it cannot sell
+        if self.current_supply <= 0:
+            self.acc_invalid_actions += 1
+            return []
+        # If excess supply, agent bids that + what can be discharged from the battery
+        else:
+            sell_amount = self.current_supply + self.max_batt_discharge
+            return [(self.mediator, SellBid(self.id, sell_amount))]
+    
+    # Charge or decharge battery by a certain amount
+    def charge_battery(self, amount):
+        # Only charge the battery by a positive amount capped by charge rate and if the battery is not full.
+        if amount > 0 and self.current_charge < self.battery_cap:
+            self.current_charge =+ amount
+        else:
+            self.acc_invalid_actions =+ 1
+
+    def discharge_battery(self, amount):
+        self.current_charge =- min(self.max_batt_discharge, amount)
+        self.current_charge = max(self.current_charge, 0)
+
+    def decode_action(self, ctx: ph.Context, action: np.ndarray):
+        if action == 0:
+            # Buy power
+           return self.buy_power()
+        elif action == 1:
+            # Sell power
+            return self.sell_power()
+        elif action == 2:
+            # Charge battery
+            self.charge_battery(self.max_batt_charge)
+            return []
+        else:
+            # If the agent has negative supply, and it has enough charge to cover it, it will do so
+            if self.current_supply < 0 and self.max_batt_discharge >= abs(self.current_supply):
+                self.current_charge =- min(self.max_batt_discharge, abs(self.current_supply))
+            # If the agent has negative supply and it does not have enough charge to cover it, this is an invalid action
+            elif self.current_supply < 0 and self.max_batt_discharge < abs(self.current_supply):
+                self.acc_invalid_actions =+ 1
+            # The agent might just have surplus energy and also choose this action, 
+            # then it just does not cooperate, but it is a legal action.
+            return []
+
+    def pre_message_resolution(self, ctx: ph.Context):
+        # This is after the agent has performed its action i.e. sent messages.
+        # But it is before the agent has received the result of its actions!
+        # Placeholder code:
+        age = ctx[self.mediator_id].public_info[self._current_user_id][
+            "age"
+        ]
+
+    @ph.agents.msg_handler(ClearedBuyBid)
+    def handle_cleared_buybid(self, _ctx: ph.Context, msg: ph.Message):
+        # Charge battery if agent bought more than load
+        energy_to_charge = msg.payload.buy_amount - self.current_load
+        if energy_to_charge > 0:
+            self.charge_battery(energy_to_charge)
+        # Update statistics
+        self.acc_local_market_cost =+ msg.payload.local_cost
+        self.acc_grid_market_cost =+ msg.payload.grid_cost
+        self.acc_grid_interactions =+ 1
+
+
+    @ph.agents.msg_handler(ClearedSellBid)
+    def handle_cleared_sellbid(self, _ctx: ph.Context, msg: ph.Message):
+        # Discharge battery if agent sold more than producing
+        energy_to_discharge = msg.payload.sell_amount - self.current_prod
+        if energy_to_discharge > 0:
+            self.discharge_battery(energy_to_discharge)
+        # Update statistics
+        self.acc_local_market_coin =+ msg.payload.local_coin
+        self.acc_feedin_coin =+ msg.payload.feedin_coin
+        self.acc_grid_interactions =+ 1
+
+    def post_message_resolution(self, ctx: ph.Context):
+        # We update everything after the messages have been resolved
+        # This is where the the values are updated for the observation in next step
+        
+        # Integer division taking into account odd and even steps
+        step = (ctx.env_view.current_step + 1) // 2
+        # Convert to hours since demand profile is just 24 hours
+        hour = step % 24
+        # Update current load
+        self.current_load = self.dm.get_agent_demand(hour, self.id)
+        # Update production
+        self.current_prod = self.dm.get_agent_production(hour, self.id)
+        # Update current own supply
+        self.current_supply = self.current_prod - self.current_load
+        # Update battery constraints
+        self.remain_batt_cap = self.battery_cap - self.current_charge
+        self.max_batt_charge = min(self.remain_batt_cap, self.charge_rate)
+        self.max_batt_discharge = min(self.current_charge, self.charge_rate)
+
+
+    def encode_observation(self, ctx: ph.Context):
+        # Encoding of observations for the action in next step
+        # = [Grid price, Local market price, Feed-in price, 
+        #   Load, PV supply, State of charge, Battery capacity,
+        #   Battery charge/discharge limit, Acc. local market coin, Acc. feed-in coin,
+        #   Acc. lokal market cost, Acc. grid market cost, Acc. number of invalid actions,
+        #   Acc. number of grid interactions]
+
+        # Get the public info from the mediator
+        grid_price = ctx[self.mediator_id].public_info["grid_price"]
+        local_price = ctx[self.mediator_id].public_info["local_price"]
+        feedin_price = ctx[self.mediator_id].public_info["feedin_price"]
+
+        # Possible we need to normalize!
+        observation = {
+            'public_info' : np.array([grid_price, local_price, feedin_price], dtype=np.float64),
+            'private_info' : np.array([
+                self.current_demand,
+                self.current_prod,
+                self.current_charge,
+                self.battery_cap,
+                self.charge_rate,
+                self.acc_local_market_coin,
+                self.acc_feedin_coin,
+                self.acc_local_market_cost,
+                self.acc_grid_market_cost,
+                self.acc_invalid_actions,
+                self.acc_grid_interactions],  dtype=np.float64
+            ),
+            #'action_mask' : np.array([1, 0, 1, 1], dtype=np.float64)  # Actions 1 is invalid
+        }
+
+        return observation
+
+    def compute_reward(self, ctx: ph.Context) -> float:
+        # Reward for satisfying demand
+
+        # Final reward
+        return normalized_satisfied_demand - normalized_missed_demand - price_distance_penalty
+
+
+    def reset(self):
+        # Reset statistics
+        self.acc_local_market_coin = 0
+        self.acc_feedin_coin = 0
+        self.acc_local_market_cost = 0
+        self.acc_grid_market_cost = 0
+        self.acc_invalid_actions = 0
+        self.acc_grid_interactions = 0
+        # Get demand data for first step
+        self.current_demand = self.dm.get_agent_demand(0, self.id)
+        # Get production data for first step
+        self.current_prod = self.dm.get_agent_production(0, self.id)
+        # Reset battery charge
+        self.current_charge = self.battery_cap / 2
+
+
+##############################################################
+# Simple prosumer agent
 ##############################################################
 class ConsumerAgent(ph.Agent):
     def __init__(self, agent_id, agent_key, exchange_id, data_manager):
@@ -230,116 +441,6 @@ class ConsumerAgent(ph.Agent):
         # Get price data for first step
         self.current_valuation_pr_MWh = self.dm.get_spot_price(0)
 
-
-##############################################################
-# Strategic RL customer agent
-##############################################################
-class StrategicConsumerAgent(ph.StrategicAgent):
-    def __init__(self, agent_id, agent_key, exchange_id, data_manager):
-        super().__init__(agent_id)
-
-        # Store the ID of the Exchange that Bids go through
-        self.exchange_id = exchange_id
-
-        # Store the DataManager
-        self.dm: DataManager = data_manager
-
-        # How much demand the customer has at current step.
-        self.current_demand: float = 0
-        self.current_valuation_pr_MWh: float = 0
-
-        # How much demand was satisfied at current time step.
-        self.satisfied_demand: float = 0
-
-        # ...and how much demand per step that was missed due to not bidding high enough.
-        self.missed_demand: float = 0
-
-        # = [Demand, Satisfied Demand, Missed Demand, Month, Date, Day, Hour, Cleared Price]
-        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(7,))
-
-        # = [Bidding price]
-        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,))
-
-
-    def decode_action(self, ctx: ph.Context, action: np.ndarray):
-        self.current_valuation_pr_MWh = action[0] * self.MAX_BID_PRICE
-        # We perform this action by sending a BuyBid to the Exchange.
-        return [(self.exchange_id, BuyBid(self.id, self.current_demand, self.current_valuation_pr_MWh))]
-
-
-    def pre_message_resolution(self, ctx: ph.Context):
-        self.satisfied_demand = 0
-        self.missed_demand = 0
-
-
-    @ph.agents.msg_handler(ClearedBid)
-    def handle_cleared_bid(self, _ctx: ph.Context, msg: ph.Message):
-        self.satisfied_demand += msg.payload.mwh
-
-
-    def post_message_resolution(self, ctx: ph.Context):
-        # Compute missed demand stat
-        self.missed_demand = max(self.current_demand - self.satisfied_demand, 0)
-
-        # Get demand and price data for NEXT step except for at last step
-        self.current_demand = self.dm.get_agent_demand(ctx.env_view.current_step, self.agent_key)
-        self.current_valuation_pr_MWh = self.dm.get_spot_price(ctx.env_view.current_step)
-
-    def encode_observation(self, ctx: ph.Context):
-        month = ctx.env_view.current_month
-        day = ctx.env_view.current_day
-        hour = ctx.env_view.current_hour
-        # Clip the cleared price to be 0 in case of negative prices
-        cleared_price = max(ctx.env_view.current_price, 0) 
-        self.MAX_DEMAND = ctx.env_view.CUST_MAX_DEMAND
-        self.MAX_BID_PRICE = ctx.env_view.MAX_BID_PRICE
-
-        return np.array(
-            [
-                self.current_demand / self.MAX_DEMAND,
-                self.satisfied_demand / self.MAX_DEMAND,
-                self.missed_demand / self.MAX_DEMAND,
-                float(month / 12),
-                float(day / 7),
-                float(hour / 23),
-                float(cleared_price / self.MAX_BID_PRICE)
-            ],
-            dtype=np.float32,
-        )
-
-    def compute_reward(self, ctx: ph.Context) -> float:
-        # Reward for satisfying demand
-        normalized_satisfied_demand = self.satisfied_demand / ctx.env_view.CUST_MAX_DEMAND
-        normalized_missed_demand = self.missed_demand / ctx.env_view.CUST_MAX_DEMAND
-        normalized_valuation = self.current_valuation_pr_MWh / ctx.env_view.MAX_BID_PRICE
-
-        self.current_valuation_pr_MWh
-        # Reward for satisfying demand
-        normalized_satisfied_demand = self.satisfied_demand / ctx.env_view.CUST_MAX_DEMAND
-        normalized_missed_demand = self.missed_demand / ctx.env_view.CUST_MAX_DEMAND
-        normalized_valuation = self.current_valuation_pr_MWh / ctx.env_view.MAX_BID_PRICE
-
-        cleared_price = max(ctx.env_view.current_price, 0) 
-        normalized_cleared_price = cleared_price / ctx.env_view.MAX_BID_PRICE
-
-        # Calculate the distance between the current valuation and the cleared price
-        price_distance = abs(normalized_valuation - normalized_cleared_price)
-
-        # Reward for being close to the cleared price
-        price_distance_penalty = price_distance ** 0.5  # Square root to penalize larger distances more
-
-        # Final reward
-        return normalized_satisfied_demand - normalized_missed_demand - price_distance_penalty
-
-
-    def reset(self):
-        # Reset statistics
-        self.satisfied_demand = 0
-        self.missed_demand = 0
-        # Get demand data for first step
-        self.current_demand = self.dm.get_agent_demand(0, self.agent_key)
-        # Get price data for first step
-        self.current_valuation_pr_MWh = self.dm.get_spot_price(0)
 
 ##############################################################
 # Exchange Agent

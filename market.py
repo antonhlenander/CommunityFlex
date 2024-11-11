@@ -1,25 +1,7 @@
 class Market():
 
     def market_clearing(supply_bids, demand_bids):
-        """
-        Market clearing algorithm with uniform pricing and unique bid identifiers.
         
-        Parameters:
-        - supply_bids: List of tuples (id, MWh, price) representing supply bids.
-        - demand_bids: List of tuples (id, MWh, price) representing demand bids.
-        
-        Returns:
-        - cleared_bids: List of tuples showing matched supply and demand (supply_id, demand_id, matched MWh, price).
-        - clearing_price: The uniform market clearing price.
-
-        Does not (yet):
-        - Return which bids were not cleared.
-        - Return satistics.
-        
-        Possible todos:
-        - Bidders might themselves figure out which bids were not cleared when receiving (or not receiving) clearing bids.
-        - Unique bid ids?
-        """
         # Step 1: Sort bids by price
         supply_bids.sort(key=lambda x: x[2])  # Sort by price ascending (cheapest first)
         demand_bids.sort(key=lambda x: x[2], reverse=True)  # Sort by price descending (most expensive first)

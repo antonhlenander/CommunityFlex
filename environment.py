@@ -10,12 +10,13 @@ import pandas as pd
 import prepros as pp
 
 
-from agents import DummyAgent, ExchangeAgent, GeneratorAgent, ConsumerAgent, StrategicConsumerAgent, StrategicGeneratorAgent
+from agents import DummyAgent, ExchangeAgent, ConsumerAgent, StrategicProsumerAgent, StrategicCommunityManager
 
-class ElMarketEnv(ph.PhantomEnv):
+class CommunityEnv(ph.StackelbergEnv):
     @dataclass(frozen=True)
     class View(ph.EnvView):
-        avg_price: float # Average price
+
+        # Current state
         current_price: float # Current price
         current_demand: float
         current_production: float
@@ -32,8 +33,10 @@ class ElMarketEnv(ph.PhantomEnv):
         CUST_MAX_DEMAND: float
         MAX_BID_PRICE: float
 
-    def __init__(self, num_steps, network, CUST_MAX_DEMAND, MAX_BID_PRICE, **kwargs):
-        self.avg_price = 0.0
+        # Statistics
+        avg_price: float # Average price
+
+    def __init__(self, num_steps, network, leader_agents, follower_agents, CUST_MAX_DEMAND, MAX_BID_PRICE, **kwargs):
         self.current_price = 0.0
         self.current_demand = 0.0
         self.current_covered_demand = 0.0
@@ -45,15 +48,18 @@ class ElMarketEnv(ph.PhantomEnv):
         self.current_timestamp = ""
         self.CUST_MAX_DEMAND = CUST_MAX_DEMAND
         self.MAX_BID_PRICE = MAX_BID_PRICE
+        # Init stats
+        self.avg_price = 0.0
         super().__init__(
             num_steps=num_steps,
             network=network,
+            leader_agents=leader_agents,
+            follower_agents=follower_agents,
             **kwargs
         )
 
-    def view(self, neighbour_id=None) -> "ElMarketEnv.View":
+    def view(self, neighbour_id=None) -> "CommunityEnv.View":
         return self.View(
-            avg_price=self.avg_price,
             current_price=self.current_price,
             current_demand=self.current_demand,
             current_production=self.current_capacity,
@@ -65,11 +71,17 @@ class ElMarketEnv(ph.PhantomEnv):
             current_timestamp=self.current_timestamp,
             CUST_MAX_DEMAND=self.CUST_MAX_DEMAND,
             MAX_BID_PRICE=self.MAX_BID_PRICE,
+            # Statistics
+            avg_price=self.avg_price,
             **super().view({}).__dict__
             )
 
     def pre_message_resolution(self):
         super().pre_message_resolution()
+        self.current_price = self.agents["CM"].dynamic_price
+        
+        
+        
         agent = self.agents["G1"]
         # Get the date string for formatting (YYYY-MM-DD HH:MM)
         date = agent.dm.prod_df['HourDK'][self._current_step-1]
