@@ -1,8 +1,13 @@
 import prepros as pp
 import pandas as pd
 
+subfolder = 'data/'
+demand_path = f'{subfolder}demandprofiles.csv'
+prod_path = f'{subfolder}PV.csv'
+price_path = f'{subfolder}price_data.csv'
+
 class DataManager:
-    def __init__(self, demand_path, prod_path, price_path=''):
+    def __init__(self, demand_path=demand_path, prod_path=prod_path, price_path=price_path):
         self.demand_df: pd.DataFrame = pp.load_demand_profile(demand_path)
         print("Demand profiles loaded!")
         self.prod_df: pd.DataFrame = pp.load_production_data(prod_path)

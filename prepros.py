@@ -28,6 +28,8 @@ def load_demand_profile(demand_path):
     # Pivot the dataframe to have a demand column for each house_index
     df = df.pivot(index='hour', columns='house_index', values='demand').reset_index()
     # Return the dataframe
+    # Divide every column from the 3rd column onwards by 1000 to convert to kW
+    df.iloc[:, 1:] = df.iloc[:, 1:] / 1000
     return df
 
 
@@ -45,7 +47,7 @@ def load_production_data(prod_path):
     # Filter rows to only include data from 2019-08-01
     df = df[df['time'].dt.date == pd.to_datetime('2019-08-01').date()]
     # Convert production to watts
-    df['production'] = df['production'] * 1000
+    df['production'] = df['production']
     # Reset the index
     df.reset_index(drop=True, inplace=True)
     return df
