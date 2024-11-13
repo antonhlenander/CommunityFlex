@@ -16,13 +16,19 @@ class DataManager:
         # self.price_df: pd.DataFrame = pp.load_price_data(price_path)
 
     def get_agent_demand(self, aid, step, noise_std=0.1):
+        noise = 0
         base_demand = self.demand_df[aid].iloc[step]
-        noise = np.random.normal(0, noise_std * base_demand)  # Add noise proportional to demand
-        return base_demand + noise
+        if base_demand > 0:
+            noise = np.random.normal(0, noise_std * base_demand)  # Add noise proportional to demand
+        return max(base_demand + noise, 0)
     
     # Right now there is no unique agent production
-    def get_agent_production(self, step, aid='A1'):
-        return self.prod_df['production'].iloc[step]
+    def get_agent_production(self, step, noise_std=0.1):
+        noise = 0
+        base_prod = self.prod_df['production'].iloc[step]
+        if base_prod > 0:
+            noise = np.random.normal(0, noise_std * base_prod) 
+        return max(base_prod + noise, 0)
 
     def get_spot_price(self, step, currency='EUR'):
         # TODO: implement zones if import/export influences pricing

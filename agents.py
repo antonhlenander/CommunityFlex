@@ -4,7 +4,7 @@ import gymnasium as gym
 import numpy as np
 import pandas as pd
 from phantom.types import AgentID
-from typing import Iterable, Sequence, Dict
+from typing import Iterable, List, Sequence, Dict, Tuple
 from messages import BuyBid, SellBid, ClearedSellBid, ClearedBuyBid, DummyMsg
 from datamanager import DataManager
 from market import Market
@@ -293,6 +293,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Only charge the battery by a positive amount capped by charge rate and if the battery is not full.
         if amount > 0 and self.current_charge < self.battery_cap:
             self.current_charge += min(self.max_batt_charge, amount)
+            self.current_charge = round(self.current_charge, 2)
         else:
             self.acc_invalid_actions += 1
 
@@ -300,6 +301,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         if amount > 0 and self.current_charge >= amount:
             self.current_charge -= min(self.max_batt_discharge, amount)
             self.current_charge = max(self.current_charge, 0)
+            self.current_charge = round(self.current_charge, 2)
 
     def decode_action(self, ctx: ph.Context, action: np.ndarray):
         if action == 0:
@@ -365,7 +367,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Update current load
         self.current_load = self.dm.get_agent_demand(self.id, hour)
         # Update production
-        self.current_prod = self.dm.get_agent_production(hour, self.id)
+        self.current_prod = self.dm.get_agent_production(hour)
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Update battery constraints
@@ -433,7 +435,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
-        self.current_prod = self.dm.get_agent_production(self.id, 0)
+        self.current_prod = self.dm.get_agent_production(0)
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge
@@ -564,56 +566,150 @@ class SimpleCommunityMediator(ph.Agent):
 
         return msgs
 
-
 ##############################################################
 # Simple prosumer agent
 ##############################################################
-class ConsumerAgent(ph.Agent):
-    def __init__(self, agent_id, agent_key, exchange_id, data_manager):
+
+class SimpleProsumerAgent(ph.Agent):
+    def __init__(self, agent_id, mediator_id, data_manager, battery: Dict[str, float], greed):
         super().__init__(agent_id)
 
-        self.agent_key = agent_key
-        self.exchange_id = exchange_id
+        # Store the ID of the community mediator
+        self.mediator_id = mediator_id
 
+        # Store the DataManager
         self.dm: DataManager = data_manager
 
-        self.current_demand: float = 0
-        self.current_valuation_pr_MWh: float = 0
+        # Agent properties
+        self.battery_cap = battery["cap"]
+        self.charge_rate = battery["charge_rate"]
+        self.greed = greed
 
-        self.satisfied_demand: float = 0
-        self.missed_demand: float = 0
+        # Agent currents
+        self.current_load: float = 0 
+        self.current_prod: float = 0
+        self.current_charge: float = 0
+        self.current_supply: float = 0
 
-    def pre_message_resolution(self, ctx: ph.Context):
-        # Reset statistics before message resolution
-        self.satisfied_demand = 0
-        self.missed_demand = 0
+        # Agent constraints
+        self.remain_batt_cap: float = 0
+        self.max_batt_charge: float = 0
+        self.max_batt_discharge: float = 0
+
+        # Accumulated statistics
+        self.acc_local_market_coin: float = 0
+        self.acc_feedin_coin: float = 0
+        self.acc_local_market_cost: float = 0
+        self.acc_grid_market_cost: float = 0
+        self.acc_grid_interactions: int = 0
+
+
+    # Charge or decharge battery by a certain amount
+    def charge_battery(self, amount):
+        # Only charge the battery by a positive amount capped by charge rate and if the battery is not full.
+        if amount > 0 and self.current_charge < self.battery_cap:
+            self.current_charge += min(self.max_batt_charge, amount)
+        else:
+            self.acc_invalid_actions += 1
+
+    def discharge_battery(self, amount):
+        if amount > 0 and self.current_charge >= amount:
+            self.current_charge -= min(self.max_batt_discharge, amount)
+            self.current_charge = max(self.current_charge, 0)
 
     def generate_messages(self, ctx: ph.Context):
-        return [(self.exchange_id, BuyBid(self.id, self.current_demand, self.current_valuation_pr_MWh))]
-    
-    @ph.agents.msg_handler(ClearedBuyBid)
-    def handle_cleared_bid(self, _ctx: ph.Context, msg: ph.Message):
-        self.satisfied_demand += msg.payload.mwh
-     
-    def post_message_resolution(self, ctx: ph.Context):
-        # Compute missed demand stat
-        self.missed_demand = self.current_demand - self.satisfied_demand
 
-        # Get demand and price data for NEXT step except for at last step
-        self.current_demand = self.dm.get_agent_demand(self.agent_key, ctx.env_view.current_step)
-        self.current_valuation_pr_MWh = self.dm.get_spot_price(ctx.env_view.current_step)
-     
+        # Evaluate greediness of agent, sell if battery charge is above threshold
+        if self.current_charge >= self.greed*self.battery_cap:
+            # The below is a subtraction for the selfconsumption
+            energy_to_sell = self.max_batt_discharge + min(self.current_supply, 0)
+            return [(self.mediator_id, SellBid(self.id, energy_to_sell))]
+
+        # In the case of battery charge below threshold
+        if self.current_charge < self.greed*self.battery_cap:
+            # If balanced supply, do nothing
+            if self.current_supply == 0:
+                return []
+            # Cases of negative supply:
+            elif self.current_supply < 0:
+                # If enough charge to cover, discharge the deficit
+                if self.max_batt_discharge >= abs(self.current_supply):
+                    self.discharge_battery(abs(self.current_supply))
+                    return []
+                # If not enough charge to cover, discharge what's available and buy the remaining
+                elif self.max_batt_discharge < abs(self.current_supply):
+                    self.discharge_battery(self.max_batt_discharge)
+                    return [(self.mediator_id, BuyBid(self.id, abs(self.current_supply+self.max_batt_discharge)))]
+            # Case of positive supply:
+            elif self.current_supply > 0:
+                self.charge_battery(self.current_supply)
+                return []
+            
+
+    @ph.agents.msg_handler(ClearedBuyBid)
+    def handle_cleared_buybid(self, _ctx: ph.Context, msg: ph.Message):
+        # Charge battery if agent bought more than load
+        energy_to_charge = msg.payload.buy_amount - abs(self.current_supply)
+        if energy_to_charge > 0:
+            self.charge_battery(energy_to_charge)
+        # Update statistics
+        self.acc_local_market_cost += msg.payload.local_cost
+        self.acc_grid_market_cost += msg.payload.grid_cost
+        self.acc_grid_interactions += 1
+
+
+    @ph.agents.msg_handler(ClearedSellBid)
+    def handle_cleared_sellbid(self, _ctx: ph.Context, msg: ph.Message):
+        # Calculate the energy to discharge based on the current supply and sell amount
+        energy_to_discharge = msg.payload.sell_amount - self.current_supply
+        if energy_to_discharge > 0:
+            self.discharge_battery(energy_to_discharge)
+        # Update statistics
+        self.acc_local_market_coin += msg.payload.local_coin
+        self.acc_feedin_coin += msg.payload.feedin_coin
+        self.acc_grid_interactions += 1
+
+    def post_message_resolution(self, ctx: ph.Context):
+        # We update everything after the messages have been resolved
+        # This is where the the values are updated for the observation in next step
+        double_step = ctx.env_view.current_step 
+        # only get new values if even step
+        if double_step % 2 == 0:
+            # Integer division taking into account odd and even steps
+            sim_step = (ctx.env_view.current_step + 1) // 2
+            # Convert to hours since demand profile is just 24 hours
+            hour = sim_step % 24
+            # Update current load only
+            self.current_load = self.dm.get_agent_demand(self.id, hour-1)
+            # Update production
+            self.current_prod = self.dm.get_agent_production(hour-1)
+            # Update current own supply
+            self.current_supply = round(self.current_prod - self.current_load, 2)
+        # Update battery constraints
+        self.remain_batt_cap = round(self.battery_cap - self.current_charge, 2)
+        self.max_batt_charge = round(min(self.remain_batt_cap, self.charge_rate), 2)
+        self.max_batt_discharge = round(min(self.current_charge, self.charge_rate), 2)
+       
+
     def reset(self):
         # Reset statistics
-        self.satisfied_demand = 0
-        self.missed_demand = 0
-        # Load demand data for first step
-        self.current_demand = self.dm.get_agent_demand(self.agent_key, 0)
-        # Get price data for first step
-        self.current_valuation_pr_MWh = self.dm.get_spot_price(0)
-
-
-
+        self.acc_local_market_coin = 0
+        self.acc_feedin_coin = 0
+        self.acc_local_market_cost = 0
+        self.acc_grid_market_cost = 0
+        self.acc_grid_interactions = 0
+        # Get demand data for first step
+        self.current_load = self.dm.get_agent_demand(self.id, 0)
+        # Get production data for first step
+        self.current_prod = self.dm.get_agent_production(0)
+        # Update current own supply
+        self.current_supply = round(self.current_prod - self.current_load, 2)
+        # Reset battery charge
+        self.current_charge = self.battery_cap / 2
+        # Reset battery constraints
+        self.remain_batt_cap = round(self.battery_cap - self.current_charge, 2)
+        self.max_batt_charge = round(min(self.remain_batt_cap, self.charge_rate), 2)
+        self.max_batt_discharge = round(min(self.current_charge, self.charge_rate), 2)
 
 
 ##############################################################

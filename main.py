@@ -3,13 +3,14 @@ import matplotlib.pyplot as plt
 import phantom as ph
 import pandas as pd
 import numpy as np
-from agents import DummyAgent, StrategicProsumerAgent, SimpleCommunityMediator
+from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent
 from environment import CommunityEnv
 from datamanager import DataManager
 
 # Params
 NUM_EPISODE_STEPS = 2400
 eta = 0.23 # From AI economist paper
+greed = 0.8
 battery = {
     'cap': 10.0,
     'charge_rate': 2.5,
@@ -17,11 +18,11 @@ battery = {
 
 dm = DataManager()
 
-house1 = StrategicProsumerAgent('H1', 'CM', dm, battery, eta)
-house2 = StrategicProsumerAgent('H2', 'CM', dm, battery, eta)
-house3 = StrategicProsumerAgent('H3', 'CM', dm, battery, eta)
-house4 = StrategicProsumerAgent('H4', 'CM', dm, battery, eta)
-house5 = StrategicProsumerAgent('H5', 'CM', dm, battery, eta)
+house1 = SimpleProsumerAgent('H1', 'CM', dm, battery, greed)
+house2 = SimpleProsumerAgent('H2', 'CM', dm, battery, eta)
+house3 = SimpleProsumerAgent('H3', 'CM', dm, battery, eta)
+house4 = SimpleProsumerAgent('H4', 'CM', dm, battery, eta)
+house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, eta)
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, local_price=1.05, feedin_price=0.3)
 
 #dummy_agent = DummyAgent("DD")
@@ -71,6 +72,7 @@ for aid in (follower_agents):
 # LOGGING
 ##############################################################
 ph.telemetry.logger.configure_print_logging(print_messages=True, metrics=metrics, enable=True)
+ph.telemetry.logger.configure_file_logging(file_path="log.json", append=True)
 
 ##############################################################
 # EXECUTE
@@ -141,11 +143,6 @@ elif sys.argv[1] == "rollout":
             # plt.legend()
             # plt.show()
         
-
-
-
-
-
 
 elif sys.argv[1] == "test":
     while env.current_step < env.num_steps:
