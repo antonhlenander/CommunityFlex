@@ -8,8 +8,8 @@ from environment import CommunityEnv
 from datamanager import DataManager
 
 # Params
-NUM_EPISODE_STEPS = 48
-eta = 0.9
+NUM_EPISODE_STEPS = 2400
+eta = 0.23 # From AI economist paper
 battery = {
     'cap': 10.0,
     'charge_rate': 2.5,
@@ -57,6 +57,17 @@ infos = {}
 metrics = {}
 
 ##############################################################
+# METRICS
+##############################################################
+
+for aid in (follower_agents):
+    metrics[f"{aid}/current_charge"] = ph.metrics.SimpleAgentMetric(aid, "current_charge")
+    metrics[f"{aid}/max_batt_charge"] = ph.metrics.SimpleAgentMetric(aid, "max_batt_charge")
+    metrics[f"{aid}/max_batt_discharge"] = ph.metrics.SimpleAgentMetric(aid, "max_batt_discharge")
+    metrics[f"{aid}/current_supply"] = ph.metrics.SimpleAgentMetric(aid, "current_supply")
+
+
+##############################################################
 # LOGGING
 ##############################################################
 ph.telemetry.logger.configure_print_logging(print_messages=True, metrics=metrics, enable=True)
@@ -99,6 +110,43 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
+    
+    agent_charge = []
+    agent_supply = []
+
+    for rollout in results:
+        for aid in follower_agents:
+            agent_actions = []
+            agent_actions += list(rollout.actions_for_agent(aid))
+            agent_charge += list(rollout.metrics[f"{aid}/current_charge"])
+            agent_supply += list(rollout.metrics[f"{aid}/current_supply"])
+
+            # Remove None values from agent_actions
+            agent_actions = [action for action in agent_actions if action is not None]
+            # Plot distribution of agent action per step for all rollouts
+            plt.hist(agent_actions, bins=4)
+            plt.title("Distribution of action values")
+            plt.xlabel("Agent action")
+            plt.ylabel("Frequency")
+            plt.show()
+
+
+            # plt.figure(figsize=(12, 6))
+            # plt.plot(agent_actions, label='Action')
+            # plt.plot(agent_charge, label='Charge')
+            # plt.plot(agent_supply, label='Supply')
+            # plt.xlabel('Time Step')
+            # plt.ylabel('Value')
+            # plt.title(f'Agent {aid} Charge and Supply Over Time')
+            # plt.legend()
+            # plt.show()
+        
+
+
+
+
+
+
 elif sys.argv[1] == "test":
     while env.current_step < env.num_steps:
         actions = {
@@ -111,18 +159,5 @@ elif sys.argv[1] == "test":
         rewards = step.rewards
         infos = step.infos
 
-# elif sys.argv[1] == "test":
-#     while env.current_step < env.num_steps:
-#         actions = {}
-#         for aid, obs in observations.items():
-#             agent = env.agents[aid]
-#             if isinstance(agent, DummyAgent):
-#                 actions[aid] = 0.9
 
-#         #print("\nactions:")
-#         #print(actions)
 
-#         step = env.step(actions)
-#         observations = step.observations
-#         rewards = step.rewards
-#         infos = step.infos

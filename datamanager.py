@@ -1,7 +1,8 @@
 import prepros as pp
 import pandas as pd
+import numpy as np
 
-subfolder = 'data/'
+subfolder = 'data/fullyearPV_singleDemand/'
 demand_path = f'{subfolder}demandprofiles.csv'
 prod_path = f'{subfolder}PV.csv'
 price_path = f'{subfolder}price_data.csv'
@@ -14,8 +15,10 @@ class DataManager:
         print("Production profiles loaded!")
         # self.price_df: pd.DataFrame = pp.load_price_data(price_path)
 
-    def get_agent_demand(self, step, aid):
-        return self.demand_df[aid].iloc[step]
+    def get_agent_demand(self, aid, step, noise_std=0.1):
+        base_demand = self.demand_df[aid].iloc[step]
+        noise = np.random.normal(0, noise_std * base_demand)  # Add noise proportional to demand
+        return base_demand + noise
     
     # Right now there is no unique agent production
     def get_agent_production(self, step, aid='A1'):

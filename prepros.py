@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-subfolder = 'data/'
+subfolder = 'data/fullyearPV_singleDemand/'
 demand_path = f'{subfolder}demandprofiles.csv'
 prod_path = f'{subfolder}PV.csv'
 price_path = f'{subfolder}price_data.csv'
@@ -18,7 +18,7 @@ def load_demand_profile(demand_path):
         'Net dwelling electricity demand': 'demand'
     }, inplace=True)
     # Convert 'time' column to datetime format
-    df['time'] = pd.to_datetime(df['time'], format="%I:%M:%S %p")
+    df['time'] = pd.to_datetime(df['time'], format="%I.%M.%S %p")
     # Extract the hour from the 'time' column
     df['hour'] = df['time'].dt.hour
     # Group by the hour and get the mean demand for each hour
@@ -45,7 +45,7 @@ def load_production_data(prod_path):
     # Convert 'time' column to datetime format
     df['time'] = pd.to_datetime(df['time'])
     # Filter rows to only include data from 2019-08-01
-    df = df[df['time'].dt.date == pd.to_datetime('2019-08-01').date()]
+    #df = df[df['time'].dt.date == pd.to_datetime('2019-08-01').date()]
     # Convert production to watts
     df['production'] = df['production']
     # Reset the index
