@@ -371,7 +371,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Update current load
         self.current_load = self.dm.get_agent_demand(self.id, hour)
         # Update production
-        self.current_prod = self.dm.get_agent_production(hour)
+        self.current_prod = self.dm.get_agent_production(self.id, hour)
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Update battery constraints
@@ -439,7 +439,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
-        self.current_prod = self.dm.get_agent_production(0)
+        self.current_prod = self.dm.get_agent_production(self.id, 0)
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge
@@ -687,7 +687,7 @@ class SimpleProsumerAgent(ph.Agent):
             # Update current load only
             self.current_load = self.dm.get_agent_demand(self.id, hour-1)
             # Update production
-            self.current_prod = self.dm.get_agent_production(hour-1)
+            self.current_prod = self.dm.get_agent_production(self.id, hour-1)
             # Update current own supply
             self.current_supply = round(self.current_prod - self.current_load, 2)
         # Update battery constraints
@@ -706,7 +706,7 @@ class SimpleProsumerAgent(ph.Agent):
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
-        self.current_prod = self.dm.get_agent_production(0)
+        self.current_prod = self.dm.get_agent_production(self.id, 0)
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge
