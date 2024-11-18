@@ -46,8 +46,6 @@ def load_production_data(prod_path):
     df['time'] = pd.to_datetime(df['time'])
     # Filter rows to only include data from 2019-08-01
     #df = df[df['time'].dt.date == pd.to_datetime('2019-08-01').date()]
-    # Convert production to watts
-    df['production'] = df['production']
     # Reset the index
     df.reset_index(drop=True, inplace=True)
     return df

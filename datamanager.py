@@ -23,9 +23,11 @@ class DataManager:
         return max(base_demand + noise, 0)
     
     # Right now there is no unique agent production
-    def get_agent_production(self, step, noise_std=0.1):
+    def get_agent_production(self, step, noise_std=0.0):
         noise = 0
         base_prod = self.prod_df['production'].iloc[step]
+        # Temporary solar hack 
+        base_prod = base_prod*10
         if base_prod > 0:
             noise = np.random.normal(0, noise_std * base_prod) 
         return max(base_prod + noise, 0)

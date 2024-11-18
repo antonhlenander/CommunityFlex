@@ -8,6 +8,7 @@ from typing import Iterable, List, Sequence, Dict, Tuple
 from messages import BuyBid, SellBid, ClearedSellBid, ClearedBuyBid, DummyMsg
 from datamanager import DataManager
 from market import Market
+from phantom.telemetry import logger
 #from datamanager import DataManager
 
 
@@ -101,6 +102,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         if len(buy_bids) > 0 and len(sell_bids) > 0:
             msgs = self.market_clearing(buy_bids=buy_bids, sell_bids=sell_bids)
+
+        for msg in msgs:
+            logger.log_msg_send(msg)
 
         return msgs
 
@@ -514,6 +518,7 @@ class SimpleCommunityMediator(ph.Agent):
         if len(buy_bids) > 0 or len(sell_bids) > 0:
             msgs = self.market_clearing(buy_bids=buy_bids, sell_bids=sell_bids)
 
+    
         return msgs
 
 

@@ -7,8 +7,9 @@ from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsum
 from environment import CommunityEnv
 from datamanager import DataManager
 
+
 # Params
-NUM_EPISODE_STEPS = 2400
+NUM_EPISODE_STEPS = 48*182
 eta = 0.23 # From AI economist paper
 greed = 0.8
 battery = {
@@ -18,11 +19,21 @@ battery = {
 
 dm = DataManager()
 
+# Case of strategic Agents
+# house1 = SimpleProsumerAgent('H1', 'CM', dm, battery, eta)
+# house2 = SimpleProsumerAgent('H2', 'CM', dm, battery, eta)
+# house3 = SimpleProsumerAgent('H3', 'CM', dm, battery, eta)
+# house4 = SimpleProsumerAgent('H4', 'CM', dm, battery, eta)
+# house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, eta)
+
+#Simple Agents case
 house1 = SimpleProsumerAgent('H1', 'CM', dm, battery, greed)
-house2 = SimpleProsumerAgent('H2', 'CM', dm, battery, eta)
-house3 = SimpleProsumerAgent('H3', 'CM', dm, battery, eta)
-house4 = SimpleProsumerAgent('H4', 'CM', dm, battery, eta)
-house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, eta)
+house2 = SimpleProsumerAgent('H2', 'CM', dm, battery, greed)
+house3 = SimpleProsumerAgent('H3', 'CM', dm, battery, greed)
+house4 = SimpleProsumerAgent('H4', 'CM', dm, battery, greed)
+house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, greed)
+
+# Mediator 
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, local_price=1.05, feedin_price=0.3)
 
 #dummy_agent = DummyAgent("DD")
@@ -50,17 +61,9 @@ env = CommunityEnv(
     )
 
 ##############################################################
-# RUN VARIABLES
-##############################################################
-observations = env.reset()
-rewards = {}
-infos = {}
-metrics = {}
-
-##############################################################
 # METRICS
 ##############################################################
-
+metrics = {}
 for aid in (follower_agents):
     metrics[f"{aid}/current_charge"] = ph.metrics.SimpleAgentMetric(aid, "current_charge")
     metrics[f"{aid}/max_batt_charge"] = ph.metrics.SimpleAgentMetric(aid, "max_batt_charge")
@@ -71,8 +74,16 @@ for aid in (follower_agents):
 ##############################################################
 # LOGGING
 ##############################################################
-ph.telemetry.logger.configure_print_logging(print_messages=True, metrics=metrics, enable=True)
-ph.telemetry.logger.configure_file_logging(file_path="log.json", append=True)
+#ph.telemetry.logger.configure_print_logging(print_messages=True, metrics=metrics, enable=True)
+ph.telemetry.logger.configure_file_logging(file_path="log.json", human_readable=False, metrics=metrics, append=False)
+
+
+##############################################################
+# RUN VARIABLES
+##############################################################
+observations = env.reset()
+rewards = {}
+infos = {}
 
 ##############################################################
 # EXECUTE
@@ -88,9 +99,9 @@ if sys.argv[1] == "train":
             'leader_agents': leader_agents,
             'follower_agents': follower_agents
         },
-        iterations=100,
+        iterations=2,
         checkpoint_freq=2,
-        policies={"prosumer_policy": follower_agents},
+        policies={"prosumer_policy": ["H1"]},
         metrics=metrics,
         results_dir="~/ray_results/community_market",
         num_workers=1
@@ -145,16 +156,20 @@ elif sys.argv[1] == "rollout":
         
 
 elif sys.argv[1] == "test":
+    terminate = False
     while env.current_step < env.num_steps:
         actions = {
             agent.id: agent.action_space.sample()
             for agent in env.strategic_agents
         }
+        # log simple agent actions?
+        # log messages?
 
-        step = env.step(actions)
+        # Manually pass termination bool
+        if env.current_step+1 == env.num_steps:
+            terminate = True
+
+        step = env.step(actions, terminate)
         observations = step.observations
         rewards = step.rewards
         infos = step.infos
-
-
-

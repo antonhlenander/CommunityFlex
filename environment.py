@@ -9,7 +9,9 @@ import pandas as pd
 
 import prepros as pp
 
-class CommunityEnv(ph.StackelbergEnv):
+from stackelberg_custom import StackelbergEnvCustom
+
+class CommunityEnv(StackelbergEnvCustom):
     @dataclass(frozen=True)
     class View(ph.EnvView):
 
