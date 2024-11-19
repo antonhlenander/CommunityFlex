@@ -17,14 +17,14 @@ greed = 0.8
 dm = DataManager()
 
 # Case of strategic Agents
-# house1 = SimpleProsumerAgent('H1', 'CM', dm, battery, eta)
+house1 = SimpleProsumerAgent('H1', 'CM', dm, battery, eta)
 # house2 = SimpleProsumerAgent('H2', 'CM', dm, battery, eta)
 # house3 = SimpleProsumerAgent('H3', 'CM', dm, battery, eta)
 # house4 = SimpleProsumerAgent('H4', 'CM', dm, battery, eta)
 # house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, eta)
 
 #Simple Agents case
-house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
+# house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
 house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
 house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
 house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
@@ -66,13 +66,20 @@ for aid in (follower_agents):
     metrics[f"{aid}/current_prod"] = ph.metrics.SimpleAgentMetric(aid, "current_prod")
     metrics[f"{aid}/current_supply"] = ph.metrics.SimpleAgentMetric(aid, "current_supply")
     metrics[f"{aid}/current_charge"] = ph.metrics.SimpleAgentMetric(aid, "current_charge")
+    metrics[f"{aid}/self_consumption"] = ph.metrics.SimpleAgentMetric(aid, "self_consumption")
+    metrics[f"{aid}/current_local_bought"] = ph.metrics.SimpleAgentMetric(aid, "current_local_bought")
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
+
     metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
     metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
+    metrics["env/total_charge"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_charge", group_reduce_action="sum")
     metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_supply", group_reduce_action="sum")
-    #metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
+    metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agents, "self_consumption", group_reduce_action="sum")
+    metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
+    metrics["env/total_avail_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "avail_energy", group_reduce_action="sum")
+    metrics["env/total_surplus_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "surplus_energy", group_reduce_action="sum")
+    metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
     
-
 ##############################################################
 # LOGGING
 ##############################################################

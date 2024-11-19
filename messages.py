@@ -52,6 +52,7 @@ class ClearedBuyBid:
 
     buyer_id: str
     buy_amount: float
+    local_amount: float
     local_cost: float
     grid_cost: float
 

@@ -3,8 +3,8 @@ class Market():
     def market_clearing(buy_bids, sell_bids, local_price, grid_price, feedin_price):
         """ Buy bids: list of tuples (buyer_id, buy_amount)
             Sell bids: list of tuples (seller_id, sell_amount) 
-            Cleared buy bids: list of tuples (buyer_id, buy_amount, local_cost, grid_cost)
-            Cleared sell bids: list of tuples (seller_id, sell_amount, local_income, grid_income)
+            Cleared buy bids: list of tuples (buyer_id, buy_amount, local_amount, local_cost, grid_cost)
+            Cleared sell bids: list of tuples (seller_id, sell_amount, local_amount, local_income, grid_income)
         """
         
 
@@ -18,14 +18,15 @@ class Market():
         self_sufficient = False
 
         # Check if supply exceeds demand
-        # TODO: Edge cases where supply or demand is zero?
+       
         if total_supply <= total_demand:
             fraction = total_supply / total_demand
             self_sufficient = True if fraction == 1.0 else False
             for bid in buy_bids:
-                local_cost = bid[1] * fraction * local_price
+                local_amount = bid[1] * fraction
+                local_cost = local_amount * local_price
                 grid_cost = bid[1] * (1-fraction) * grid_price
-                cleared_buy_bids.append((bid[0], bid[1], local_cost, grid_cost))
+                cleared_buy_bids.append((bid[0], bid[1], local_amount, local_cost, grid_cost))
             for bid in sell_bids:
                 cleared_sell_bids.append((bid[0], bid[1], bid[1]*local_price, 0))
 
@@ -35,7 +36,7 @@ class Market():
             self_sufficient = True
             for bid in buy_bids:
                 # All buy bids supplied with local energy
-                cleared_buy_bids.append((bid[0], bid[1], bid[1]*local_price, 0))
+                cleared_buy_bids.append((bid[0], bid[1], bid[1], bid[1]*local_price, 0))
             for bid in sell_bids:
                 local_income = bid[1] * fraction * local_price
                 grid_income = bid[1] * (1-fraction) * feedin_price

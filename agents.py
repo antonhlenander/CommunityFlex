@@ -557,11 +557,11 @@ class SimpleCommunityMediator(ph.Agent):
         msgs = []
         # Create messages for the cleared buy bids
         for cleared_buy_bid in cleared_buy_bids:
-            buyer_id, buy_amount, local_cost, grid_cost = cleared_buy_bid
+            buyer_id, buy_amount, local_amount, local_cost, grid_cost = cleared_buy_bid
             msgs.append(
                 (
                     buyer_id,
-                    ClearedBuyBid(buyer_id, buy_amount, round(local_cost, 2), round(grid_cost, 2)),
+                    ClearedBuyBid(buyer_id, buy_amount, round(local_amount, 2), round(local_cost, 2), round(grid_cost, 2)),
                 )
             )
         # Create messages for the cleared sell bids
@@ -600,6 +600,10 @@ class SimpleProsumerAgent(ph.Agent):
         self.current_prod: float = 0
         self.current_charge: float = 0
         self.current_supply: float = 0
+        self.self_consumption: float = 0
+        self.avail_energy: float = 0
+        self.surplus_energy: float = 0
+        self.current_local_bought: float = 0
 
         # Agent constraints
         self.remain_batt_cap: float = 0
@@ -628,16 +632,22 @@ class SimpleProsumerAgent(ph.Agent):
             self.current_charge -= min(self.max_batt_discharge, amount)
             self.current_charge = max(self.current_charge, 0)
 
+    def pre_message_resolution(self, ctx: ph.Context) -> None:
+        self.self_consumption = 0.0
+        self.current_local_bought = 0.0
+
+
     def generate_messages(self, ctx: ph.Context):
 
         # Evaluate greediness of agent, sell if battery charge is above threshold
         if self.current_charge >= self.greed*self.battery_cap:
             # The below is a subtraction for the selfconsumption
             energy_to_sell = self.max_batt_discharge + min(self.current_supply, 0)
+            
             return [(self.mediator_id, SellBid(self.id, energy_to_sell))]
 
         # In the case of battery charge below threshold
-        if self.current_charge < self.greed*self.battery_cap:
+        elif self.current_charge < self.greed*self.battery_cap:
             # If balanced supply, do nothing
             if self.current_supply == 0:
                 return []
@@ -664,6 +674,7 @@ class SimpleProsumerAgent(ph.Agent):
         if energy_to_charge > 0:
             self.charge_battery(energy_to_charge)
         # Update statistics
+        self.current_local_bought += msg.payload.local_amount
         self.acc_local_market_cost += msg.payload.local_cost
         self.acc_grid_market_cost += msg.payload.grid_cost
         self.acc_grid_interactions += 1
@@ -696,24 +707,33 @@ class SimpleProsumerAgent(ph.Agent):
             self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)
             # Update current own supply
             self.current_supply = round(self.current_prod - self.current_load, 2)
+            
         # Update battery constraints
         self.remain_batt_cap = round(self.battery_cap - self.current_charge, 2)
         self.max_batt_charge = round(min(self.remain_batt_cap, self.charge_rate), 2)
         self.max_batt_discharge = round(min(self.current_charge, self.charge_rate), 2)
+
         # Update statistics
         self.net_loss = (
             self.acc_local_market_cost + self.acc_grid_market_cost 
             - self.acc_local_market_coin - self.acc_feedin_coin
         )
+        self.avail_energy = self.current_prod + self.max_batt_discharge
+        self.surplus_energy = self.avail_energy - self.current_load
+        # Below does not work for strategic agent!
+        if self.surplus_energy < 0:
+            self.self_consumption = self.avail_energy
+        else :
+            self.self_consumption = self.current_load
         
-
+        
     def reset(self):
         # Reset statistics
-        self.acc_local_market_coin = 0
-        self.acc_feedin_coin = 0
-        self.acc_local_market_cost = 0
-        self.acc_grid_market_cost = 0
-        self.acc_grid_interactions = 0
+        self.acc_local_market_coin = 0.0
+        self.acc_feedin_coin = 0.0
+        self.acc_local_market_cost = 0.0
+        self.acc_grid_market_cost = 0.0
+        self.acc_grid_interactions = 0.0
         # Get battery capacity
         self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
         # Get charge rate
@@ -730,6 +750,11 @@ class SimpleProsumerAgent(ph.Agent):
         self.remain_batt_cap = round(self.battery_cap - self.current_charge, 2)
         self.max_batt_charge = round(min(self.remain_batt_cap, self.charge_rate), 2)
         self.max_batt_discharge = round(min(self.current_charge, self.charge_rate), 2)
+        # 
+        self.surplus_energy = 0.0
+        self.avail_energy = self.current_supply + self.max_batt_discharge
+        #
+        self.self_consumption = 0.0
 
 
 ##############################################################
