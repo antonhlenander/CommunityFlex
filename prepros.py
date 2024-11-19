@@ -87,9 +87,9 @@ def load_production_data(prod_path):
         df[f'H{i}'] = df[f'H{i}'] * max_cap[i-1]
 
     # Create a dataframe to store the battery capacities
-    batt_cap_df = pd.DataFrame()
+    batt_cap_df = pd.DataFrame(columns=[f'H{i}' for i in range(1, 15)])
     for i in range(1, 15):
-        batt_cap_df[f'H{i}'] = max_cap[i-1]*5
+        batt_cap_df.at[0, f'H{i}'] = max_cap[i-1]*5
 
     return df, batt_cap_df
 

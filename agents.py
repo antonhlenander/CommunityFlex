@@ -197,7 +197,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 # Strategic RL prosumer agent
 ##############################################################
 class StrategicProsumerAgent(ph.StrategicAgent):
-    def __init__(self, agent_id, mediator_id, data_manager, battery: Dict[str, float], eta):
+    def __init__(self, agent_id, mediator_id, data_manager, eta):
         super().__init__(agent_id)
 
         # Store the ID of the community mediator
@@ -207,8 +207,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.dm: DataManager = data_manager
 
         # Agent properties
-        self.battery_cap = battery["cap"]
-        self.charge_rate = battery["charge_rate"]
+        self.battery_cap: float = 0
+        self.charge_rate: float = 0
         self.eta = eta
 
         # Agent currents
@@ -363,7 +363,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def post_message_resolution(self, ctx: ph.Context):
         # We update everything after the messages have been resolved
         # This is where the the values are updated for the observation in next step
-        
+        # TODO: The implementation has to be update values as the simple agent
+
         # Integer division taking into account odd and even steps
         step = (ctx.env_view.current_step + 1) // 2
         # Convert to hours since demand profile is just 24 hours
@@ -436,6 +437,10 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_grid_market_cost = 0
         self.acc_invalid_actions = 0
         self.acc_grid_interactions = 0
+        # Get battery capacity
+        self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
+        # Get charge rate
+        self.charge_rate = self.battery_cap / 2
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
@@ -576,7 +581,7 @@ class SimpleCommunityMediator(ph.Agent):
 ##############################################################
 
 class SimpleProsumerAgent(ph.Agent):
-    def __init__(self, agent_id, mediator_id, data_manager, battery: Dict[str, float], greed):
+    def __init__(self, agent_id, mediator_id, data_manager, greed):
         super().__init__(agent_id)
 
         # Store the ID of the community mediator
@@ -586,8 +591,8 @@ class SimpleProsumerAgent(ph.Agent):
         self.dm: DataManager = data_manager
 
         # Agent properties
-        self.battery_cap = battery["cap"]
-        self.charge_rate = battery["charge_rate"]
+        self.battery_cap: float = 0
+        self.charge_rate: float = 0
         self.greed = greed
 
         # Agent currents
@@ -607,6 +612,7 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_local_market_cost: float = 0
         self.acc_grid_market_cost: float = 0
         self.acc_grid_interactions: int = 0
+        self.net_loss: float = 0 
 
 
     # Charge or decharge battery by a certain amount
@@ -687,14 +693,19 @@ class SimpleProsumerAgent(ph.Agent):
             # Update current load only
             self.current_load = self.dm.get_agent_demand(self.id, hour-1)
             # Update production
-            self.current_prod = self.dm.get_agent_production(self.id, hour-1)
+            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)
             # Update current own supply
             self.current_supply = round(self.current_prod - self.current_load, 2)
         # Update battery constraints
         self.remain_batt_cap = round(self.battery_cap - self.current_charge, 2)
         self.max_batt_charge = round(min(self.remain_batt_cap, self.charge_rate), 2)
         self.max_batt_discharge = round(min(self.current_charge, self.charge_rate), 2)
-       
+        # Update statistics
+        self.net_loss = (
+            self.acc_local_market_cost + self.acc_grid_market_cost 
+            - self.acc_local_market_coin - self.acc_feedin_coin
+        )
+        
 
     def reset(self):
         # Reset statistics
@@ -703,6 +714,10 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_local_market_cost = 0
         self.acc_grid_market_cost = 0
         self.acc_grid_interactions = 0
+        # Get battery capacity
+        self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
+        # Get charge rate
+        self.charge_rate = self.battery_cap / 2
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step

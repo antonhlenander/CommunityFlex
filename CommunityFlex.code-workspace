@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "CommunityFlex",
+			"path": "."
+		},
+		{
+			"name": "dynamic-pricing-capacity-limitation-kopi",
+			"path": "../dynamic-pricing-capacity-limitation-kopi"
+		}
+	],
+	"settings": {}
+}

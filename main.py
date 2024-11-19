@@ -12,10 +12,7 @@ from datamanager import DataManager
 NUM_EPISODE_STEPS = 48*182
 eta = 0.23 # From AI economist paper
 greed = 0.8
-battery = {
-    'cap': 10.0,
-    'charge_rate': 2.5,
-}
+
 
 dm = DataManager()
 
@@ -27,11 +24,11 @@ dm = DataManager()
 # house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, eta)
 
 #Simple Agents case
-house1 = SimpleProsumerAgent('H1', 'CM', dm, battery, greed)
-house2 = SimpleProsumerAgent('H2', 'CM', dm, battery, greed)
-house3 = SimpleProsumerAgent('H3', 'CM', dm, battery, greed)
-house4 = SimpleProsumerAgent('H4', 'CM', dm, battery, greed)
-house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, greed)
+house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
+house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
+house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
+house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
+house5 = SimpleProsumerAgent('H5', 'CM', dm, greed)
 
 # Mediator 
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, local_price=1.05, feedin_price=0.3)
@@ -65,11 +62,16 @@ env = CommunityEnv(
 ##############################################################
 metrics = {}
 for aid in (follower_agents):
-    metrics[f"{aid}/current_charge"] = ph.metrics.SimpleAgentMetric(aid, "current_charge")
-    metrics[f"{aid}/max_batt_charge"] = ph.metrics.SimpleAgentMetric(aid, "max_batt_charge")
-    metrics[f"{aid}/max_batt_discharge"] = ph.metrics.SimpleAgentMetric(aid, "max_batt_discharge")
+    metrics[f"{aid}/current_load"] = ph.metrics.SimpleAgentMetric(aid, "current_load")
+    metrics[f"{aid}/current_prod"] = ph.metrics.SimpleAgentMetric(aid, "current_prod")
     metrics[f"{aid}/current_supply"] = ph.metrics.SimpleAgentMetric(aid, "current_supply")
-
+    metrics[f"{aid}/current_charge"] = ph.metrics.SimpleAgentMetric(aid, "current_charge")
+    metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
+    metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
+    metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
+    metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_supply", group_reduce_action="sum")
+    #metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
+    
 
 ##############################################################
 # LOGGING

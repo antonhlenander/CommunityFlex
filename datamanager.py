@@ -23,7 +23,7 @@ class DataManager:
         return max(base_demand + noise, 0)
     
     # Right now there is no unique agent production
-    def get_agent_production(self, aid,step, noise_std=0.0):
+    def get_agent_production(self, aid, step, noise_std=0.0):
         noise = 0
         base_prod = self.prod_df[aid].iloc[step]
         # Temporary solar hack 
@@ -41,7 +41,7 @@ class DataManager:
             return self.price_df['SpotPriceDKK'].iloc[step]
         
     def get_agent_battery_capacity(self, aid):
-        return self.batt_cap_df[aid]
+        return self.batt_cap_df[aid].iloc[0]
     
     def get_agent_maxdemand(self, aid):
         return self.cons_df[aid].max()
