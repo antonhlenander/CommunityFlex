@@ -4,7 +4,7 @@ import phantom as ph
 import pandas as pd
 import numpy as np
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent
-from environment import CommunityEnv
+from environment import CommunityEnv, SimpleCommunityEnv
 from datamanager import DataManager
 
 
@@ -17,14 +17,14 @@ greed = 0.8
 dm = DataManager()
 
 # Case of strategic Agents
-#house1 = SimpleProsumerAgent('H1', 'CM', dm, eta)
-# house2 = SimpleProsumerAgent('H2', 'CM', dm, battery, eta)
-# house3 = SimpleProsumerAgent('H3', 'CM', dm, battery, eta)
-# house4 = SimpleProsumerAgent('H4', 'CM', dm, battery, eta)
-# house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, eta)
+house1 = StrategicProsumerAgent('H1', 'CM', dm, eta)
+# house2 = StrategicProsumerAgent('H2', 'CM', dm, battery, eta)
+# house3 = StrategicProsumerAgent('H3', 'CM', dm, battery, eta)
+# house4 = StrategicProsumerAgent('H4', 'CM', dm, battery, eta)
+# house5 = StrategicProsumerAgent('H5', 'CM', dm, battery, eta)
 
 #Simple Agents case
-house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
+# house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
 house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
 house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
 house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
@@ -34,7 +34,6 @@ house5 = SimpleProsumerAgent('H5', 'CM', dm, greed)
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, local_price=1.05, feedin_price=0.3)
 
 #dummy_agent = DummyAgent("DD")
-
 prosumer_agents = [
     house1, house2, house3, house4, house5
 ]
@@ -84,7 +83,7 @@ for aid in (follower_agents):
 # LOGGING
 ##############################################################
 #ph.telemetry.logger.configure_print_logging(print_messages=True, metrics=metrics, enable=True)
-ph.telemetry.logger.configure_file_logging(file_path="log.json", human_readable=False, metrics=metrics, append=False)
+#ph.telemetry.logger.configure_file_logging(file_path="log.json", human_readable=False, metrics=metrics, append=False)
 
 
 ##############################################################
@@ -133,15 +132,20 @@ elif sys.argv[1] == "rollout":
     results = list(results)
 
     
-    agent_charge = []
-    agent_supply = []
+
 
     for rollout in results:
         for aid in follower_agents:
+            if aid != 'H1':
+                break
             agent_actions = []
+            agent_charge = []
+            agent_supply = []
+            agent_net_loss = []
             agent_actions += list(rollout.actions_for_agent(aid))
             agent_charge += list(rollout.metrics[f"{aid}/current_charge"])
             agent_supply += list(rollout.metrics[f"{aid}/current_supply"])
+            agent_net_loss += list(rollout.metrics[f"{aid}/net_loss"])
 
             # Remove None values from agent_actions
             agent_actions = [action for action in agent_actions if action is not None]
@@ -150,7 +154,12 @@ elif sys.argv[1] == "rollout":
             plt.title("Distribution of action values")
             plt.xlabel("Agent action")
             plt.ylabel("Frequency")
-            plt.show()
+            plt.savefig("action_dist.png")
+            plt.close()
+
+            plt.plot(agent_net_loss, label='Net Loss')
+            plt.savefig("agent_net_loss.png")
+            plt.close()
 
 
             # plt.figure(figsize=(12, 6))

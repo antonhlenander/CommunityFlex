@@ -217,6 +217,11 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.current_charge: float = 0
         self.current_supply: float = 0
 
+        self.self_consumption: float = 0
+        self.avail_energy: float = 0
+        self.surplus_energy: float = 0
+        self.current_local_bought: float = 0
+
         # Agent constraints
         self.remain_batt_cap: float = 0
         self.max_batt_charge: float = 0
@@ -229,6 +234,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_grid_market_cost: float = 0
         self.acc_invalid_actions: int = 0
         self.acc_grid_interactions: int = 0
+        self.net_loss: float = 0
         
         # Utility
         self.utility_prev: float = 0
@@ -249,9 +255,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             {
                 # Can include type here as well in the future maybe
                 "public_info": gym.spaces.Box(
-                    low=0.0, high=9999, shape=(3,), dtype=np.float32
+                    low=0.0, high=99999, shape=(3,), dtype=np.float32
                 ),
-                "private_info": gym.spaces.Box(low=0.0, high=9999, shape=(11,), dtype=np.float32),
+                "private_info": gym.spaces.Box(low=0.0, high=99999, shape=(11,), dtype=np.float32),
                 # "action_mask": gym.spaces.Discrete(4),
                 # "user_age": gym.spaces.Box(low=0.0, high=100., shape=(1,), dtype=np.float64),
                 # "user_zipcode": gym.spaces.Box(low=0.0, high=99999., shape=(1,), dtype=np.float64),
@@ -260,7 +266,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
     def buy_power(self):
         buy_amount = round(self.max_batt_charge - self.current_supply, 2)
-        # Cannot buy power if agent has more supply than it can charge
+        # Cannot buy if the agent has a balanced or positive supply
         if self.current_supply >= self.max_batt_charge:
             self.acc_invalid_actions += 1
             return []
@@ -282,7 +288,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             if self.max_batt_discharge <= abs(self.current_supply): 
                 self.acc_invalid_actions += 1
                 return []
-            # If it has more charge than it needs to cover the deficit, it sells the surplus
+            # If it has more charge than it needs to cover the deficit, it sells the surplus (discharge is done in returned sellbid)
             elif self.max_batt_discharge > abs(self.current_supply):
                 sell_amount = self.max_batt_discharge - abs(self.current_supply)
                 return [(self.mediator_id, SellBid(self.id, round(sell_amount, 2)))]
@@ -307,6 +313,10 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             self.current_charge = max(self.current_charge, 0)
             self.current_charge = round(self.current_charge, 2)
 
+    def pre_message_resolution(self, ctx: ph.Context) -> None:
+        self.self_consumption = 0.0
+        self.current_local_bought = 0.0
+
     def decode_action(self, ctx: ph.Context, action: np.ndarray):
         if action == 0:
             # Buy power
@@ -316,11 +326,16 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             return self.sell_power()
         elif action == 2:
             # Charge battery
-            self.charge_battery(self.current_supply)
+            # Can only charge if the agent has positive supply
+            if self.current_supply > 0:
+                self.charge_battery(self.current_supply)
+            else:
+                self.acc_invalid_actions += 1
             return []
         else:
             # If the agent has negative supply, and it has enough charge to cover it, it will do so
             if self.current_supply < 0 and self.max_batt_discharge >= abs(self.current_supply):
+                self.self_consumption += abs(self.current_supply)
                 self.discharge_battery(abs(self.current_supply))
             # If the agent has negative supply and it does not have enough charge to cover it, this is an invalid action
             elif self.current_supply < 0 and self.max_batt_discharge < abs(self.current_supply):
@@ -344,6 +359,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         if energy_to_charge > 0:
             self.charge_battery(energy_to_charge)
         # Update statistics
+        self.current_local_bought += msg.payload.local_amount
         self.acc_local_market_cost += msg.payload.local_cost
         self.acc_grid_market_cost += msg.payload.grid_cost
         self.acc_grid_interactions += 1
@@ -363,22 +379,35 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def post_message_resolution(self, ctx: ph.Context):
         # We update everything after the messages have been resolved
         # This is where the the values are updated for the observation in next step
-        # TODO: The implementation has to be update values as the simple agent
-
-        # Integer division taking into account odd and even steps
-        step = (ctx.env_view.current_step + 1) // 2
-        # Convert to hours since demand profile is just 24 hours
-        hour = step % 24
-        # Update current load
-        self.current_load = self.dm.get_agent_demand(self.id, hour)
-        # Update production
-        self.current_prod = self.dm.get_agent_production(self.id, hour)
-        # Update current own supply
-        self.current_supply = round(self.current_prod - self.current_load, 2)
+        double_step = ctx.env_view.current_step 
+        # only get new values if even step
+        if double_step % 2 == 0:
+            # Integer division taking into account odd and even steps
+            sim_step = (ctx.env_view.current_step + 1) // 2
+            # Convert to hours since demand profile is just 24 hours
+            hour = sim_step % 24
+            # Update current load only
+            self.current_load = self.dm.get_agent_demand(self.id, hour-1)
+            # Update production
+            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)
+            # Update current own supply
+            self.current_supply = round(self.current_prod - self.current_load, 2)
+            
         # Update battery constraints
         self.remain_batt_cap = round(self.battery_cap - self.current_charge, 2)
         self.max_batt_charge = round(min(self.remain_batt_cap, self.charge_rate), 2)
         self.max_batt_discharge = round(min(self.current_charge, self.charge_rate), 2)
+
+        # Update statistics
+        self.net_loss = (
+            self.acc_local_market_cost + self.acc_grid_market_cost 
+            - self.acc_local_market_coin - self.acc_feedin_coin
+        )
+        self.avail_energy = self.current_prod + self.max_batt_discharge
+        self.surplus_energy = self.avail_energy - self.current_load
+        # Below does not work for strategic agent!
+        if self.current_supply < 0:
+            self.self_consumption += self.current_prod
 
 
     def encode_observation(self, ctx: ph.Context):
@@ -455,6 +484,11 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.remain_batt_cap = round(self.battery_cap - self.current_charge, 2)
         self.max_batt_charge = round(min(self.remain_batt_cap, self.charge_rate), 2)
         self.max_batt_discharge = round(min(self.current_charge, self.charge_rate), 2)
+
+        self.surplus_energy = 0.0
+        self.avail_energy = self.current_supply + self.max_batt_discharge
+        #
+        self.self_consumption = 0.0
 
 ##############################################################
 # Simple Community Mediator Agent
@@ -746,6 +780,7 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_local_market_cost = 0.0
         self.acc_grid_market_cost = 0.0
         self.acc_grid_interactions = 0.0
+        self.net_loss = 0.0
         # Get battery capacity
         self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
         # Get charge rate
@@ -767,6 +802,7 @@ class SimpleProsumerAgent(ph.Agent):
         self.avail_energy = self.current_supply + self.max_batt_discharge
         #
         self.self_consumption = 0.0
+   
 
 
 ##############################################################

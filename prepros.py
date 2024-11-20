@@ -80,10 +80,12 @@ def load_production_data(prod_path):
 
     # Generation of solar PV systems and corresponding batteries (this should be random at some point)
     #Random.seed!(1234)
-    max_cap = np.random.randint(0, 4, size=14)
-    print(max_cap)
+    #max_cap = np.random.randint(1, 4, size=14)
+    #
+    # max_cap = np.insert(max_cap, 0, 2)
     # Define production capacity for each house
-    #max_cap = [2, 1, 2, 3, 1, 1, 2, 3, 3, 1, 2, 3, 1, 1]
+    max_cap = [2, 2, 3, 1, 1, 1, 2, 3, 3, 2, 3, 2, 3, 1, 3]
+    print(max_cap)
     for i in range(1, 15):
         # Multiply all columns by the max capacity for each
         df[f'H{i}'] = df[f'H{i}'] * max_cap[i-1]
