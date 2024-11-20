@@ -650,6 +650,7 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_local_market_cost: float = 0
         self.acc_grid_market_cost: float = 0
         self.acc_grid_interactions: int = 0
+        self.acc_invalid_actions: int = 0 # just here to not get an error
         self.net_loss: float = 0 
 
 

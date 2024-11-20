@@ -68,6 +68,7 @@ for aid in (follower_agents):
     metrics[f"{aid}/self_consumption"] = ph.metrics.SimpleAgentMetric(aid, "self_consumption")
     metrics[f"{aid}/current_local_bought"] = ph.metrics.SimpleAgentMetric(aid, "current_local_bought")
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
+    metrics[f"{aid}/acc_invalid_actions"] = ph.metrics.SimpleAgentMetric(aid, "acc_invalid_actions")
 
     metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
     metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
@@ -142,10 +143,12 @@ elif sys.argv[1] == "rollout":
             agent_charge = []
             agent_supply = []
             agent_net_loss = []
+            invalid_actions = []
             agent_actions += list(rollout.actions_for_agent(aid))
             agent_charge += list(rollout.metrics[f"{aid}/current_charge"])
             agent_supply += list(rollout.metrics[f"{aid}/current_supply"])
             agent_net_loss += list(rollout.metrics[f"{aid}/net_loss"])
+            invalid_actions += list(rollout.metrics[f"{aid}/acc_invalid_actions"])
 
             # Remove None values from agent_actions
             agent_actions = [action for action in agent_actions if action is not None]
@@ -161,6 +164,13 @@ elif sys.argv[1] == "rollout":
             plt.savefig("agent_net_loss.png")
             plt.close()
 
+            plt.plot(agent_charge, label='battery charge')
+            plt.savefig("batterycharge.png")
+            plt.close()
+
+            plt.plot(invalid_actions, label='Invalid Actions')
+            plt.savefig("invalid_actions.png")
+            plt.close()
 
             # plt.figure(figsize=(12, 6))
             # plt.plot(agent_actions, label='Action')
