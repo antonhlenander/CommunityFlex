@@ -643,7 +643,7 @@ class SimpleProsumerAgent(ph.Agent):
         if self.current_charge >= self.greed*self.battery_cap:
             # If balanced supply, sell what can be discharged from battery
             if self.current_supply == 0:
-                return [[(self.mediator_id, SellBid(self.id, self.max_batt_discharge))]]
+                return [(self.mediator_id, SellBid(self.id, self.max_batt_discharge))]
             # Cases of negative supply:
             elif self.current_supply < 0:
                 # If enough charge to cover, discharge the deficit and sell the rest.
@@ -652,7 +652,7 @@ class SimpleProsumerAgent(ph.Agent):
                     energy_to_sell = self.max_batt_discharge - abs(self.current_supply)
                     self.discharge_battery(abs(self.current_supply))
                     if energy_to_sell > 0:
-                        return [[(self.mediator_id, SellBid(self.id, energy_to_sell))] ]
+                        return [(self.mediator_id, SellBid(self.id, energy_to_sell))]
                 # If not enough charge to cover, discharge what's available and buy the remaining
                 elif self.max_batt_discharge < abs(self.current_supply):
                     self.discharge_battery(self.max_batt_discharge)
