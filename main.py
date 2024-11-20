@@ -9,7 +9,7 @@ from datamanager import DataManager
 
 
 # Params
-NUM_EPISODE_STEPS = 48*182
+NUM_EPISODE_STEPS = 48*365
 eta = 0.23 # From AI economist paper
 greed = 0.8
 
@@ -17,14 +17,14 @@ greed = 0.8
 dm = DataManager()
 
 # Case of strategic Agents
-house1 = SimpleProsumerAgent('H1', 'CM', dm, battery, eta)
+#house1 = SimpleProsumerAgent('H1', 'CM', dm, eta)
 # house2 = SimpleProsumerAgent('H2', 'CM', dm, battery, eta)
 # house3 = SimpleProsumerAgent('H3', 'CM', dm, battery, eta)
 # house4 = SimpleProsumerAgent('H4', 'CM', dm, battery, eta)
 # house5 = SimpleProsumerAgent('H5', 'CM', dm, battery, eta)
 
 #Simple Agents case
-# house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
+house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
 house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
 house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
 house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
@@ -108,8 +108,8 @@ if sys.argv[1] == "train":
             'leader_agents': leader_agents,
             'follower_agents': follower_agents
         },
-        iterations=2,
-        checkpoint_freq=2,
+        iterations=50,
+        checkpoint_freq=1,
         policies={"prosumer_policy": ["H1"]},
         metrics=metrics,
         results_dir="~/ray_results/community_market",

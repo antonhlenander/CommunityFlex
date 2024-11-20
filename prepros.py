@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 subfolder = 'data/fullyearPV_singleDemand/'
 demand_path = f'{subfolder}demandprofiles.csv'
@@ -79,9 +80,10 @@ def load_production_data(prod_path):
 
     # Generation of solar PV systems and corresponding batteries (this should be random at some point)
     #Random.seed!(1234)
-    #max_cap = rand(0:3,N_consumers)
+    max_cap = np.random.randint(0, 4, size=14)
+    print(max_cap)
     # Define production capacity for each house
-    max_cap = [2, 1, 2, 3, 1, 1, 2, 3, 3, 1, 2, 3, 1, 1]
+    #max_cap = [2, 1, 2, 3, 1, 1, 2, 3, 3, 1, 2, 3, 1, 1]
     for i in range(1, 15):
         # Multiply all columns by the max capacity for each
         df[f'H{i}'] = df[f'H{i}'] * max_cap[i-1]
