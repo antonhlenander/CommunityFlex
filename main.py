@@ -163,7 +163,7 @@ elif sys.argv[1] == "rollout":
             # Remove None values from agent_actions
             agent_actions = [action for action in agent_actions if action is not None]
             # Plot distribution of agent action per step for all rollouts
-            folder = "output"
+            folder = "output/"
 
             print(agent_actions)
             plt.hist(agent_actions, bins=4)
