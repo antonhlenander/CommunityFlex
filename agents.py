@@ -252,29 +252,31 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(11,))
 
         # Observation space
-        self.observation_space = gym.spaces.Box(
-            np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 
-            np.array([1, 1, 1, 1, 1, 1, 1, 1, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]), dtype=np.float32)
+        # self.observation_space = gym.spaces.Box(
+        #     np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 
+        #     np.array([1, 1, 1, 1, 1, 1, 1, 1, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]), dtype=np.float32)
         
         # = {Buy, Sell, Charge, No-op}
         self.action_space = gym.spaces.Discrete(4)
 
 
 
-    # @property
-    # def observation_space(self):
-    #     return gym.spaces.Dict(
-    #         {
-    #             # Can include type here as well in the future maybe
-    #             "public_info": gym.spaces.Box(
-    #                 low=0.0, high=99999, shape=(3,), dtype=np.float32
-    #             ),
-    #             "private_info": gym.spaces.Box(low=0.0, high=99999, shape=(11,), dtype=np.float32),
-    #             #"action_mask": gym.spaces.MultiBinary(4),
-    #             # "user_age": gym.spaces.Box(low=0.0, high=100., shape=(1,), dtype=np.float64),
-    #             # "user_zipcode": gym.spaces.Box(low=0.0, high=99999., shape=(1,), dtype=np.float64),
-    #         }
-    #     )
+    @property
+    def observation_space(self):
+        return gym.spaces.Dict(
+            {
+                # Can include type here as well in the future maybe
+                "action_mask": gym.spaces.Box(0, 1, shape=(4,), dtype=np.float64),
+
+                "observations": gym.spaces.Box(low=0.0, high=99999, shape=(14,), dtype=np.float64),
+
+                # "normed_info": gym.spaces.Box(
+                #     low=0.0, high=1, shape=(8,), dtype=np.float64
+                # ),
+                # "user_age": gym.spaces.Box(low=0.0, high=100., shape=(1,), dtype=np.float64),
+                # "user_zipcode": gym.spaces.Box(low=0.0, high=99999., shape=(1,), dtype=np.float64),
+            }
+        )
 
     def buy_power(self):
         buy_amount = round(self.max_batt_charge - self.current_supply, 2)
@@ -440,9 +442,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         #   Acc. number of grid interactions]
 
         # Get the public info from the mediator
-        grid_price = ctx[self.mediator_id].public_info["grid_price"] / 1.8
-        local_price = ctx[self.mediator_id].public_info["local_price"] / 1.8
-        feedin_price = ctx[self.mediator_id].public_info["feedin_price"] / 1.8
+        grid_price = ctx[self.mediator_id].public_info["grid_price"] 
+        local_price = ctx[self.mediator_id].public_info["local_price"] 
+        feedin_price = ctx[self.mediator_id].public_info["feedin_price"] 
 
         # Normalization
 
@@ -452,32 +454,33 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         battery_cap = min(self.battery_cap / self.all_max_cap, 1)
         charge_rate = min(self.charge_rate / self.all_max_cap, 1)
 
-        observation = np.array(
-            [
-                grid_price, local_price, feedin_price,
-                current_load, current_prod, current_charge, battery_cap, charge_rate,
-                self.acc_local_market_coin, self.acc_feedin_coin,
-                self.acc_local_market_cost, self.acc_grid_market_cost,
-                self.acc_invalid_actions, self.acc_grid_interactions
-            ], dtype=np.float32)
+        # observation = np.array(
+        #     [
+        #         grid_price, local_price, feedin_price,
+        #         current_load, current_prod, current_charge, battery_cap, charge_rate,
+        #         self.acc_local_market_coin, self.acc_feedin_coin,
+        #         self.acc_local_market_cost, self.acc_grid_market_cost,
+        #         self.acc_invalid_actions, self.acc_grid_interactions
+        #     ], dtype=np.float32)
 
-        # observation = {
-        #     'public_info' : np.array([grid_price, local_price, feedin_price], dtype=np.float32),
-        #     'private_info' : np.array([
-        #         current_load,
-        #         current_prod,
-        #         current_charge,
-        #         battery_cap,
-        #         charge_rate,
-        #         self.acc_local_market_coin,
-        #         self.acc_feedin_coin,
-        #         self.acc_local_market_cost,
-        #         self.acc_grid_market_cost,
-        #         self.acc_invalid_actions,
-        #         self.acc_grid_interactions],  dtype=np.float32
-        #     ),
-        #     #'action_mask' : np.array([1, 0, 0, 0], dtype=np.float64)  # Actions 1 is invalid
-        # }
+        observation = {
+            'observations' : np.array([
+                grid_price, 
+                local_price, 
+                feedin_price,
+                self.current_load,
+                self.current_prod,
+                self.current_charge,
+                self.battery_cap,
+                self.charge_rate,
+                self.acc_local_market_coin,
+                self.acc_feedin_coin,
+                self.acc_local_market_cost,
+                self.acc_grid_market_cost,
+                self.acc_invalid_actions,
+                self.acc_grid_interactions], dtype=np.float64),
+            'action_mask' : np.array([1, 0, 0, 0], dtype=np.float64)  # Only action 1 is allowed
+        }
 
         return observation
 
@@ -494,7 +497,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         marginal_utility = utility - self.utility_prev 
         # Update utility
         self.utility_prev = utility
-        return marginal_utility - self.acc_invalid_actions
+        # return marginal_utility - self.acc_invalid_actions
+        return marginal_utility
 
 
     def reset(self):

@@ -7,6 +7,9 @@
 		{
 			"name": "dynamic-pricing-capacity-limitation-kopi",
 			"path": "../dynamic-pricing-capacity-limitation-kopi"
+		},
+		{
+			"path": "../Phantom_dev/Phantom_dev"
 		}
 	],
 	"settings": {}

@@ -8,6 +8,14 @@ from environment import CommunityEnv, SimpleCommunityEnv
 from datamanager import DataManager
 import ray
 
+from ray.rllib.examples.models.action_mask_model import TorchActionMaskModel
+from ray.rllib.models import ModelCatalog
+
+# Register the model
+ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
+
+
+
 
 # Params
 NUM_EPISODE_STEPS = 48*365
@@ -109,7 +117,7 @@ if sys.argv[1] == "train":
             'leader_agents': leader_agents,
             'follower_agents': follower_agents
         },
-        #rllib_config={'lr' : 1e-5},
+        rllib_config={"model": {"custom_model": "torch_action_mask_model"}},
         ray_config={'dashboard_port': 8265},
         iterations=1000,
         checkpoint_freq=1,
@@ -135,9 +143,6 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    
-
-
     for rollout in results:
         for aid in follower_agents:
             if aid != 'H3':
@@ -158,48 +163,50 @@ elif sys.argv[1] == "rollout":
             # Remove None values from agent_actions
             agent_actions = [action for action in agent_actions if action is not None]
             # Plot distribution of agent action per step for all rollouts
+            folder = "output"
+
             print(agent_actions)
             plt.hist(agent_actions, bins=4)
             plt.title("Distribution of action values")
             plt.xlabel("Agent action")
             plt.ylabel("Frequency")
-            plt.savefig("action_dist.png")
+            plt.savefig(f"{folder}action_dist.png")
             plt.close()
 
             plt.plot(agent_net_loss, label='Net Loss')
-            plt.savefig("agent_net_loss.png")
+            plt.savefig(f"{folder}agent_net_loss.png")
             plt.close()
 
             plt.plot(agent_charge, label='battery charge')
-            plt.savefig("batterycharge.png")
+            plt.savefig(f"{folder}batterycharge.png")
             plt.close()
 
             plt.plot(invalid_actions, label='Invalid Actions')
-            plt.savefig("invalid_actions.png")
+            plt.savefig(f"{folder}invalid_actions.png")
             plt.close()
 
             plt.plot(agent_prod, label='Production')
-            plt.savefig("production.png")
+            plt.savefig(f"{folder}production.png")
             plt.close()
 
             plt.plot(agent_load, label='Load')
-            plt.savefig("load.png")
+            plt.savefig(f"{folder}load.png")
             plt.close()
 
             plt.hist(agent_load, bins=20)
-            plt.savefig("load_dist.png")
+            plt.savefig(f"{folder}load_dist.png")
             plt.close()
 
             plt.hist(agent_prod, bins=20)
-            plt.savefig("prod_dist.png")
+            plt.savefig(f"{folder}prod_dist.png")
             plt.close()
 
             plt.plot(agent_supply, label='Supply')
-            plt.savefig("supply.png")
+            plt.savefig(f"{folder}supply.png")
             plt.close()
 
             plt.hist(agent_supply, bins=20)
-            plt.savefig("supply_dist.png")
+            plt.savefig(f"{folder}supply_dist.png")
             plt.close()
 
             # plt.figure(figsize=(12, 6))
