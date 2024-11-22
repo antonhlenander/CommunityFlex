@@ -44,14 +44,22 @@ class DataManager:
         return self.batt_cap_df[aid].iloc[0]
     
     def get_agent_maxdemand(self, aid):
-        return self.cons_df[aid].max()
+        max = self.demand_df[aid].max()
+        return max*1.1
+    
+    def get_all_maxdemand(self):
+        max = self.demand_df.max().max()
+        return max*1.1
+    
+    def get_all_maxprod(self):
+        max_df = self.prod_df.iloc[:, 1:]
+        max = max_df.max().max()
+        return max
     
     def get_agent_maxproduction(self, aid):
         return self.prod_df[aid].max()
     
-    def get_maxbidprice(self, currency='EUR') -> float:
-        if currency == 'EUR':
-            return self.price_df['SpotPriceEUR'].max()
-        elif currency == 'DKK':
-            return self.price_df['SpotPriceDKK'].max()
+    def get_all_maxcap(self):
+        max = self.batt_cap_df.max().max()
+        return max
     

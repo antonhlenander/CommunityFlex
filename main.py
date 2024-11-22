@@ -6,6 +6,7 @@ import numpy as np
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent
 from environment import CommunityEnv, SimpleCommunityEnv
 from datamanager import DataManager
+import ray
 
 
 # Params
@@ -17,16 +18,16 @@ greed = 0.8
 dm = DataManager()
 
 # Case of strategic Agents
-house1 = StrategicProsumerAgent('H1', 'CM', dm, eta)
+# house1 = StrategicProsumerAgent('H1', 'CM', dm, eta)
 # house2 = StrategicProsumerAgent('H2', 'CM', dm, battery, eta)
-# house3 = StrategicProsumerAgent('H3', 'CM', dm, battery, eta)
+house3 = StrategicProsumerAgent('H3', 'CM', dm, eta)
 # house4 = StrategicProsumerAgent('H4', 'CM', dm, battery, eta)
 # house5 = StrategicProsumerAgent('H5', 'CM', dm, battery, eta)
 
 #Simple Agents case
-# house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
+house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
 house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
-house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
+#house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
 house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
 house5 = SimpleProsumerAgent('H5', 'CM', dm, greed)
 
@@ -108,9 +109,11 @@ if sys.argv[1] == "train":
             'leader_agents': leader_agents,
             'follower_agents': follower_agents
         },
-        iterations=50,
+        #rllib_config={'lr' : 1e-5},
+        ray_config={'dashboard_port': 8265},
+        iterations=1000,
         checkpoint_freq=1,
-        policies={"prosumer_policy": ["H1"]},
+        policies={"prosumer_policy": ["H3"]},
         metrics=metrics,
         results_dir="~/ray_results/community_market",
         num_workers=1
@@ -137,8 +140,8 @@ elif sys.argv[1] == "rollout":
 
     for rollout in results:
         for aid in follower_agents:
-            if aid != 'H1':
-                break
+            if aid != 'H3':
+                continue
             agent_actions = []
             agent_charge = []
             agent_supply = []
@@ -147,12 +150,15 @@ elif sys.argv[1] == "rollout":
             agent_actions += list(rollout.actions_for_agent(aid))
             agent_charge += list(rollout.metrics[f"{aid}/current_charge"])
             agent_supply += list(rollout.metrics[f"{aid}/current_supply"])
+            agent_prod = list(rollout.metrics[f"{aid}/current_prod"])
+            agent_load = list(rollout.metrics[f"{aid}/current_load"])
             agent_net_loss += list(rollout.metrics[f"{aid}/net_loss"])
             invalid_actions += list(rollout.metrics[f"{aid}/acc_invalid_actions"])
 
             # Remove None values from agent_actions
             agent_actions = [action for action in agent_actions if action is not None]
             # Plot distribution of agent action per step for all rollouts
+            print(agent_actions)
             plt.hist(agent_actions, bins=4)
             plt.title("Distribution of action values")
             plt.xlabel("Agent action")
@@ -170,6 +176,30 @@ elif sys.argv[1] == "rollout":
 
             plt.plot(invalid_actions, label='Invalid Actions')
             plt.savefig("invalid_actions.png")
+            plt.close()
+
+            plt.plot(agent_prod, label='Production')
+            plt.savefig("production.png")
+            plt.close()
+
+            plt.plot(agent_load, label='Load')
+            plt.savefig("load.png")
+            plt.close()
+
+            plt.hist(agent_load, bins=20)
+            plt.savefig("load_dist.png")
+            plt.close()
+
+            plt.hist(agent_prod, bins=20)
+            plt.savefig("prod_dist.png")
+            plt.close()
+
+            plt.plot(agent_supply, label='Supply')
+            plt.savefig("supply.png")
+            plt.close()
+
+            plt.hist(agent_supply, bins=20)
+            plt.savefig("supply_dist.png")
             plt.close()
 
             # plt.figure(figsize=(12, 6))
