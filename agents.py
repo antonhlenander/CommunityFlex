@@ -9,6 +9,7 @@ from messages import BuyBid, SellBid, ClearedSellBid, ClearedBuyBid, DummyMsg
 from datamanager import DataManager
 from market import Market
 from phantom.telemetry import logger
+import time
 #from datamanager import DataManager
 
 
@@ -244,6 +245,10 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Utility
         self.utility_prev: float = 0
 
+        self.reward: float = 0
+
+        self.actionmask: int = 0
+
         # = [Grid price, Local market price, Feed-in price, 
         #   Load, PV supply, State of charge, Battery capacity,
         #   Battery charge/discharge limit, Acc. local market coin, Acc. feed-in coin,
@@ -257,7 +262,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         #     np.array([1, 1, 1, 1, 1, 1, 1, 1, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]), dtype=np.float32)
         
         # = {Buy, Sell, Charge, No-op}
-        self.action_space = gym.spaces.Discrete(4)
+        self.action_space = gym.spaces.Discrete(6)
 
 
 
@@ -266,7 +271,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         return gym.spaces.Dict(
             {
                 # Can include type here as well in the future maybe
-                "action_mask": gym.spaces.Box(0, 1, shape=(4,), dtype=np.float64),
+                "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float64),
 
                 "observations": gym.spaces.Box(low=0.0, high=99999, shape=(14,), dtype=np.float64),
 
@@ -278,41 +283,18 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             }
         )
 
-    def buy_power(self):
-        buy_amount = round(self.max_batt_charge - self.current_supply, 2)
-        # Cannot buy if the agent has a balanced or positive supply
-        if self.current_supply >= self.max_batt_charge:
-            self.acc_invalid_actions += 1
-            self.curr_invalid_actions = 1000
-            return []
-        # Can only buy the amount of power that agent cannot supply itself, 
-        # bounded by the max amount agent can charge
-        elif self.current_supply > 0 and self.current_supply < self.max_batt_charge:
+    def buy_power(self, amount):
+        if amount > 0:
+            buy_amount = round(amount, 2)
             return [(self.mediator_id, BuyBid(self.id, buy_amount))]
-        # If negative own supply, agent buys the amount it can charge + its deficit in own supply
         else:
-            # This case will be if supply is negative or zero
-            # i.e. the subtraction is an addition
-            return [(self.mediator_id, BuyBid(self.id, buy_amount))]
+            print("NEGATIVE BUY AMOUNT")
 
-    # TODO: agent tries to sell negative amount?
-    def sell_power(self):
+
+    # TODO: fix function
+    def sell_power(self, amount):
         # Cases agent has negative or balanced supply
-        if self.current_supply <= 0:
-            # If it cannot cover or exactly cover it with the battery, this action is invalid
-            if self.max_batt_discharge <= abs(self.current_supply): 
-                self.acc_invalid_actions += 1
-                self.curr_invalid_actions = 1000
-                return []
-            # If it has more charge than it needs to cover the deficit, it sells the surplus (discharge is done in returned sellbid)
-            elif self.max_batt_discharge > abs(self.current_supply):
-                sell_amount = self.max_batt_discharge - abs(self.current_supply)
-                return [(self.mediator_id, SellBid(self.id, round(sell_amount, 2)))]
-        # Cases agent has positive supply
-        elif self.current_supply > 0:
-            # Sell the surplus supply + what can be sold from battery
-            sell_amount = self.current_supply + self.max_batt_discharge
-            return [(self.mediator_id, SellBid(self.id, round(sell_amount, 2)))]
+        return [(self.mediator_id, SellBid(self.id, round(amount, 2)))]
     
     # Charge or decharge battery by a certain amount
     def charge_battery(self, amount):
@@ -335,23 +317,52 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.current_local_bought = 0.0
 
     def decode_action(self, ctx: ph.Context, action: np.ndarray):
-        self.action = action
+        #print(action)
         if action == 0:
-           # Buy power
-           return self.buy_power()
-        elif action == 1: 
-            # Sell power
-               return self.sell_power()
-        elif action == 2:
+           # Buy enough power to cover own deficit
+            if self.current_supply >= 0:
+                self.acc_invalid_actions += 1
+                return []
+            else:
+                return self.buy_power(abs(self.current_supply))
+        
+        elif action == 1:
+            # Buy power to charge and fill possible deficit
+            if self.current_supply >= self.max_batt_charge:
+                self.acc_invalid_actions += 1
+            else:
+                deficit = abs(min(self.current_supply, 0))
+                buy_amount = self.max_batt_charge + deficit
+                return self.buy_power(buy_amount)
+
+        elif action == 2: 
+            # Sell own surplus production
+            if self.current_supply > 0:
+                return self.sell_power(self.current_supply)
+            else:
+                self.acc_invalid_actions += 1
+                return []
+            
+        elif action == 3:
+            # Sell from battery and possible surplus production
+            sell_amount = self.max_batt_discharge + self.current_supply
+            if sell_amount > 0:
+                self.discharge_battery(min(self.max_batt_discharge, sell_amount))
+                return self.sell_power(sell_amount)
+            else:
+                self.acc_invalid_actions += 1
+                return []
+        
+        elif action == 4:
             # Charge battery
             # Can only charge if the agent has positive supply
             if self.current_supply > 0:
                 self.charge_battery(self.current_supply)
             else:
                 self.acc_invalid_actions += 1
-                self.curr_invalid_actions = 1000
             return []
-        elif action == 3:
+        
+        elif action == 5:
             # If the agent has negative supply, and it has enough charge to cover it, it will do so
             if self.current_supply < 0 and self.max_batt_discharge >= abs(self.current_supply):
                 self.self_consumption += abs(self.current_supply)
@@ -387,10 +398,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
     @ph.agents.msg_handler(ClearedSellBid)
     def handle_cleared_sellbid(self, _ctx: ph.Context, msg: ph.Message):
-        # Calculate the energy to discharge based on the current supply and sell amount
-        energy_to_discharge = msg.payload.sell_amount - self.current_supply
-        if energy_to_discharge > 0:
-            self.discharge_battery(energy_to_discharge)
+        # Calculate the energy to discharge
         # Update statistics
         self.acc_local_market_coin += msg.payload.local_coin
         self.acc_feedin_coin += msg.payload.feedin_coin
@@ -440,14 +448,48 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         #   Battery charge/discharge limit, Acc. local market coin, Acc. feed-in coin,
         #   Acc. lokal market cost, Acc. grid market cost, Acc. number of invalid actions,
         #   Acc. number of grid interactions]
+        
+        # Action masking
+
+        # Can agent buy to cover its own deficit?
+        # Not if it has enough supply.
+        if self.current_supply >= 0:
+            buy = 0
+        else:
+            buy = 1
+        # Can agent buy to charge?
+        if self.current_supply >= self.max_batt_charge:
+            buy_charge = 0
+        else:
+            buy_charge = 1
+        # Can agent sell its own power?
+        if self.current_supply <= 0:
+            sell = 0
+        else:
+            sell = 1
+        # Can agent sell its charge?
+        if self.max_batt_discharge > abs(min(self.current_supply, 0)):
+            sell_batt = 1
+        else: 
+            sell_batt = 0
+        # Can agent charge?
+        if self.current_supply > 0 and self.max_batt_charge > 0:
+            charge = 1
+        else:
+            charge = 0
+        # Can agent do nothing?
+        if self.current_supply < 0 and self.max_batt_discharge < abs(min(self.current_supply, 0)):
+            noop = 0
+        else:
+            noop = 1
+
 
         # Get the public info from the mediator
-        grid_price = ctx[self.mediator_id].public_info["grid_price"] 
+        grid_price = ctx[self.mediator_id].public_info["grid_price"]
         local_price = ctx[self.mediator_id].public_info["local_price"] 
         feedin_price = ctx[self.mediator_id].public_info["feedin_price"] 
 
         # Normalization
-
         current_load = min(self.current_load / self.all_max_load, 1)
         current_prod = min(self.current_prod / self.all_max_prod, 1)
         current_charge = min(self.current_charge / self.all_max_cap, 1)
@@ -479,16 +521,14 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 self.acc_grid_market_cost,
                 self.acc_invalid_actions,
                 self.acc_grid_interactions], dtype=np.float64),
-            'action_mask' : np.array([1, 0, 0, 0], dtype=np.float64)  # Only action 1 is allowed
+            'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float64)  # Only action 1 is allowed
         }
+        actionmask = [buy, buy_charge, sell, sell_batt, charge, noop]
 
         return observation
 
     def compute_reward(self, ctx: ph.Context) -> float:
-        # Reward for satisfying demand
         I_t = self.acc_local_market_coin + self.acc_feedin_coin
-        #C_t = self.acc_local_market_cost + self.acc_grid_market_cost + self.acc_invalid_actions
-        # Temporary attempt without invalid actions
         C_t = self.acc_local_market_cost + self.acc_grid_market_cost
         eta_comp = 1 - self.eta
         upper_term = (pow(I_t, eta_comp) - 1)
@@ -497,7 +537,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         marginal_utility = utility - self.utility_prev 
         # Update utility
         self.utility_prev = utility
-        # return marginal_utility - self.acc_invalid_actions
+        self.reward = marginal_utility
+        #print(marginal_utility)
+        #time.sleep(1)
         return marginal_utility
 
 
@@ -512,7 +554,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Get battery capacity
         self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
         # Get charge rate
-        self.charge_rate = self.battery_cap / 2
+        self.charge_rate = self.battery_cap / 4
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
@@ -541,7 +583,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 # Simple Community Mediator Agent
 # Sets a fixed price for the local market
 ##############################################################
-class SimpleCommunityMediator(ph.Agent):
+class SimpleCommunityMediator(ph.Agent):#
     "Stategic Community Mediator Agent"
 
     @dataclass(frozen=True)
@@ -832,7 +874,7 @@ class SimpleProsumerAgent(ph.Agent):
         # Get battery capacity
         self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
         # Get charge rate
-        self.charge_rate = self.battery_cap / 2
+        self.charge_rate = self.battery_cap / 4
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step

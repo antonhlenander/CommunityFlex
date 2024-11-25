@@ -19,7 +19,7 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 # Params
 NUM_EPISODE_STEPS = 48*365
-eta = 0.23 # From AI economist paper
+eta = 0.0 # From AI economist paper
 greed = 0.8
 
 
@@ -69,6 +69,21 @@ env = CommunityEnv(
 # METRICS
 ##############################################################
 metrics = {}
+
+metrics["H3/utility_prev"] = ph.metrics.SimpleAgentMetric("H3", "utility_prev")
+metrics["H3/reward"] = ph.metrics.SimpleAgentMetric("H3", "reward")
+metrics["H3/actionmask"] = ph.metrics.SimpleAgentMetric("H3", "actionmask")
+
+metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
+metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
+metrics["env/total_charge"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_charge", group_reduce_action="sum")
+metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_supply", group_reduce_action="sum")
+metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agents, "self_consumption", group_reduce_action="sum")
+metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
+metrics["env/total_avail_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "avail_energy", group_reduce_action="sum")
+metrics["env/total_surplus_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "surplus_energy", group_reduce_action="sum")
+metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
+
 for aid in (follower_agents):
     metrics[f"{aid}/current_load"] = ph.metrics.SimpleAgentMetric(aid, "current_load")
     metrics[f"{aid}/current_prod"] = ph.metrics.SimpleAgentMetric(aid, "current_prod")
@@ -77,17 +92,8 @@ for aid in (follower_agents):
     metrics[f"{aid}/self_consumption"] = ph.metrics.SimpleAgentMetric(aid, "self_consumption")
     metrics[f"{aid}/current_local_bought"] = ph.metrics.SimpleAgentMetric(aid, "current_local_bought")
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
-    metrics[f"{aid}/acc_invalid_actions"] = ph.metrics.SimpleAgentMetric(aid, "acc_invalid_actions")
-
-    metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
-    metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
-    metrics["env/total_charge"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_charge", group_reduce_action="sum")
-    metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_supply", group_reduce_action="sum")
-    metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agents, "self_consumption", group_reduce_action="sum")
-    metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
-    metrics["env/total_avail_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "avail_energy", group_reduce_action="sum")
-    metrics["env/total_surplus_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "surplus_energy", group_reduce_action="sum")
-    metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
+    metrics[f"{aid}/acc_local_market_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_local_market_coin")
+    metrics[f"{aid}/acc_feedin_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_feedin_coin")
     
 ##############################################################
 # LOGGING
@@ -166,7 +172,7 @@ elif sys.argv[1] == "rollout":
             folder = "output/"
 
             print(agent_actions)
-            plt.hist(agent_actions, bins=4)
+            plt.hist(agent_actions, bins=6)
             plt.title("Distribution of action values")
             plt.xlabel("Agent action")
             plt.ylabel("Frequency")
