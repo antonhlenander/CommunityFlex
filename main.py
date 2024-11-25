@@ -38,13 +38,22 @@ house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
 #house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
 house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
 house5 = SimpleProsumerAgent('H5', 'CM', dm, greed)
+house6 = SimpleProsumerAgent('H6', 'CM', dm, greed)
+house7 = SimpleProsumerAgent('H7', 'CM', dm, greed)
+house8 = SimpleProsumerAgent('H8', 'CM', dm, greed)
+house9 = SimpleProsumerAgent('H9', 'CM', dm, greed)
+house10 = SimpleProsumerAgent('H10', 'CM', dm, greed)
+house11 = SimpleProsumerAgent('H11', 'CM', dm, greed)
+house12 = SimpleProsumerAgent('H12', 'CM', dm, greed)
+house13 = SimpleProsumerAgent('H13', 'CM', dm, greed)
+house14 = SimpleProsumerAgent('H14', 'CM', dm, greed)
 
 # Mediator 
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, local_price=1.05, feedin_price=0.3)
 
 #dummy_agent = DummyAgent("DD")
 prosumer_agents = [
-    house1, house2, house3, house4, house5
+    house1, house2, house3, house4, house5, house6, house7, house8, house9, house10, house11, house12, house13
 ]
 
 # Define Network and create connections between Actors
