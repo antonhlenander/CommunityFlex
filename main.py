@@ -28,14 +28,14 @@ dm = DataManager()
 # Case of strategic Agents
 # house1 = StrategicProsumerAgent('H1', 'CM', dm, eta)
 # house2 = StrategicProsumerAgent('H2', 'CM', dm, battery, eta)
-house3 = StrategicProsumerAgent('H3', 'CM', dm, eta)
+#house3 = StrategicProsumerAgent('H3', 'CM', dm, eta)
 # house4 = StrategicProsumerAgent('H4', 'CM', dm, battery, eta)
 # house5 = StrategicProsumerAgent('H5', 'CM', dm, battery, eta)
 
 #Simple Agents case
 house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
 house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
-#house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
+house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
 house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
 house5 = SimpleProsumerAgent('H5', 'CM', dm, greed)
 house6 = SimpleProsumerAgent('H6', 'CM', dm, greed)
@@ -53,7 +53,7 @@ mediator = SimpleCommunityMediator('CM', grid_price=1.8, local_price=1.05, feedi
 
 #dummy_agent = DummyAgent("DD")
 prosumer_agents = [
-    house1, house2, house3, house4, house5, house6, house7, house8, house9, house10, house11, house12, house13
+    house1, house2, house3, house4, house5, house6, house7, house8, house9, house10, house11, house12, house13, house14
 ]
 
 # Define Network and create connections between Actors
@@ -67,7 +67,7 @@ for agent in prosumer_agents:
 leader_agents = ['CM']
 follower_agents = [agent.id for agent in prosumer_agents]
 
-env = CommunityEnv(
+env = SimpleCommunityEnv(
     num_steps=NUM_EPISODE_STEPS, 
     network=network, 
     leader_agents=leader_agents,
@@ -79,9 +79,10 @@ env = CommunityEnv(
 ##############################################################
 metrics = {}
 
-metrics["H3/utility_prev"] = ph.metrics.SimpleAgentMetric("H3", "utility_prev")
-metrics["H3/reward"] = ph.metrics.SimpleAgentMetric("H3", "reward")
-metrics["H3/actionmask"] = ph.metrics.SimpleAgentMetric("H3", "actionmask")
+# metrics["H3/utility_prev"] = ph.metrics.SimpleAgentMetric("H3", "utility_prev")
+# metrics["H3/reward"] = ph.metrics.SimpleAgentMetric("H3", "reward")
+# metrics["H3/actionmask"] = ph.metrics.SimpleAgentMetric("H3", "actionmask")
+
 
 metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
 metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
@@ -103,12 +104,13 @@ for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
     metrics[f"{aid}/acc_local_market_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_local_market_coin")
     metrics[f"{aid}/acc_feedin_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_feedin_coin")
+    metrics[f"{aid}/acc_reward"] = ph.metrics.SimpleAgentMetric(aid, "acc_reward")
     
 ##############################################################
 # LOGGING
 ##############################################################
 #ph.telemetry.logger.configure_print_logging(print_messages=True, metrics=metrics, enable=True)
-#ph.telemetry.logger.configure_file_logging(file_path="log.json", human_readable=False, metrics=metrics, append=False)
+ph.telemetry.logger.configure_file_logging(file_path="log.json", human_readable=False, metrics=metrics, append=False)
 
 
 ##############################################################
