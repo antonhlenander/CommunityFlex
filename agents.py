@@ -742,6 +742,9 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_invalid_actions: int = 0 # just here to not get an error
         self.net_loss: float = 0 
 
+        # Reward
+        self.acc_reward: float = 0
+        self.utility_prev: float = 0
 
     # Charge or decharge battery by a certain amount
     def charge_battery(self, amount):
@@ -861,6 +864,21 @@ class SimpleProsumerAgent(ph.Agent):
             self.self_consumption = self.avail_energy
         else :
             self.self_consumption = self.current_load
+
+        # Reward test
+        I_t = self.acc_local_market_coin + self.acc_feedin_coin
+        C_t = self.acc_local_market_cost + self.acc_grid_market_cost
+        eta_comp = 1 - 0.22
+        upper_term = (pow(I_t, eta_comp) - 1)
+        utility = (upper_term / eta_comp) - C_t
+        # Final reward
+        marginal_utility = utility - self.utility_prev 
+        # Update utility
+        self.utility_prev = utility
+        self.acc_reward += marginal_utility
+        #print(marginal_utility)
+        #time.sleep(1)
+    
         
         
     def reset(self):

@@ -19,7 +19,7 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 # Params
 NUM_EPISODE_STEPS = 48*365
-eta = 0.0 # From AI economist paper
+eta = 0.22 # From AI economist paper
 greed = 0.8
 
 
