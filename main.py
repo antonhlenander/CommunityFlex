@@ -143,7 +143,8 @@ if sys.argv[1] == "train":
             'leader_agents': leader_agents,
             'follower_agents': follower_agents
         },
-        rllib_config={"model": {"custom_model": "torch_action_mask_model"}},
+        rllib_config={"model": {"custom_model": "torch_action_mask_model"},
+                      "lr": 0.00001},
         iterations=1000,
         checkpoint_freq=1,
         policies={"prosumer_policy": follower_agents},
