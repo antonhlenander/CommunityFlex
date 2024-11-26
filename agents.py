@@ -487,9 +487,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
 
         # Get the public info from the mediator
-        grid_price = ctx[self.mediator_id].public_info["grid_price"]
-        local_price = ctx[self.mediator_id].public_info["local_price"] 
-        feedin_price = ctx[self.mediator_id].public_info["feedin_price"] 
+        grid_price = ctx[self.mediator_id].public_info["grid_price"] / 1.8
+        local_price = ctx[self.mediator_id].public_info["local_price"] / 1.8
+        feedin_price = ctx[self.mediator_id].public_info["feedin_price"] / 1.8
 
         # Normalization
         current_load = min(self.current_load / self.all_max_load, 1)
@@ -497,32 +497,27 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         current_charge = min(self.current_charge / self.all_max_cap, 1)
         battery_cap = min(self.battery_cap / self.all_max_cap, 1)
         charge_rate = min(self.charge_rate / self.all_max_cap, 1)
-
-        # observation = np.array(
-        #     [
-        #         grid_price, local_price, feedin_price,
-        #         current_load, current_prod, current_charge, battery_cap, charge_rate,
-        #         self.acc_local_market_coin, self.acc_feedin_coin,
-        #         self.acc_local_market_cost, self.acc_grid_market_cost,
-        #         self.acc_invalid_actions, self.acc_grid_interactions
-        #     ], dtype=np.float32)
+        acc_local_coin = min(self.acc_local_market_coin / 10000, 1)
+        acc_feedin_coin = min(self.acc_feedin_coin / 10000, 1)
+        acc_local_market_cost = min(self.acc_local_market_cost / 10000, 1)
+        acc_grid_market_cost = min(self.acc_grid_market_cost / 10000, 1)
+        acc_grid_interactions = min(self.acc_grid_interactions / 10000, 1)
 
         observation = {
             'observations' : np.array([
                 grid_price, 
                 local_price, 
                 feedin_price,
-                self.current_load,
-                self.current_prod,
-                self.current_charge,
-                self.battery_cap,
-                self.charge_rate,
-                self.acc_local_market_coin,
-                self.acc_feedin_coin,
-                self.acc_local_market_cost,
-                self.acc_grid_market_cost,
-                self.acc_invalid_actions,
-                self.acc_grid_interactions], dtype=np.float64),
+                current_load,
+                current_prod,
+                current_charge,
+                battery_cap,
+                charge_rate,
+                acc_local_coin,
+                acc_feedin_coin,
+                acc_local_market_cost,
+                acc_grid_market_cost,
+                acc_grid_interactions], dtype=np.float64),
             'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float64)  # Only action 1 is allowed
         }
         actionmask = [buy, buy_charge, sell, sell_batt, charge, noop]

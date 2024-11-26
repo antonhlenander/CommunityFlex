@@ -100,6 +100,7 @@ metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_
 metrics["env/total_avail_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "avail_energy", group_reduce_action="sum")
 metrics["env/total_surplus_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "surplus_energy", group_reduce_action="sum")
 metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
+metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
 
 for aid in (follower_agents):
     metrics[f"{aid}/current_load"] = ph.metrics.SimpleAgentMetric(aid, "current_load")
