@@ -11,7 +11,7 @@ class DataManager:
     def __init__(self, demand_path=demand_path, prod_path=prod_path, price_path=price_path):
         self.demand_df: pd.DataFrame = pp.load_demand_profile(demand_path)
         print("Demand profiles loaded!")
-        self.prod_df, self.batt_cap_df = pp.load_production_data(prod_path)
+        self.prod_df = pp.load_production_data(prod_path)
         print("Production profiles loaded!")
         # self.price_df: pd.DataFrame = pp.load_price_data(price_path)
 

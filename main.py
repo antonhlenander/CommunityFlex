@@ -26,34 +26,44 @@ greed = 0.8
 dm = DataManager()
 
 # Case of strategic Agents
-# house1 = StrategicProsumerAgent('H1', 'CM', dm, eta)
-# house2 = StrategicProsumerAgent('H2', 'CM', dm, battery, eta)
+house1 = StrategicProsumerAgent('H1', 'CM', dm, eta)
+house2 = StrategicProsumerAgent('H2', 'CM', dm, eta)
 house3 = StrategicProsumerAgent('H3', 'CM', dm, eta)
-# house4 = StrategicProsumerAgent('H4', 'CM', dm, battery, eta)
-# house5 = StrategicProsumerAgent('H5', 'CM', dm, battery, eta)
+house4 = StrategicProsumerAgent('H4', 'CM', dm, eta)
+house5 = StrategicProsumerAgent('H5', 'CM', dm, eta)
+house6 = StrategicProsumerAgent('H6', 'CM', dm, eta)
+house7 = StrategicProsumerAgent('H7', 'CM', dm, eta)
+house8 = StrategicProsumerAgent('H8', 'CM', dm, eta)
+house9 = StrategicProsumerAgent('H9', 'CM', dm, eta)
+house10 = StrategicProsumerAgent('H10', 'CM', dm, eta)
+house11 = StrategicProsumerAgent('H11', 'CM', dm, eta)
+house12 = StrategicProsumerAgent('H12', 'CM', dm, eta)
+house13 = StrategicProsumerAgent('H13', 'CM', dm, eta)
+house14 = StrategicProsumerAgent('H14', 'CM', dm, eta)
+
 
 #Simple Agents case
-house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
-house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
-#house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
-house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
-house5 = SimpleProsumerAgent('H5', 'CM', dm, greed)
-house6 = SimpleProsumerAgent('H6', 'CM', dm, greed)
-house7 = SimpleProsumerAgent('H7', 'CM', dm, greed)
-house8 = SimpleProsumerAgent('H8', 'CM', dm, greed)
-house9 = SimpleProsumerAgent('H9', 'CM', dm, greed)
-house10 = SimpleProsumerAgent('H10', 'CM', dm, greed)
-house11 = SimpleProsumerAgent('H11', 'CM', dm, greed)
-house12 = SimpleProsumerAgent('H12', 'CM', dm, greed)
-house13 = SimpleProsumerAgent('H13', 'CM', dm, greed)
-house14 = SimpleProsumerAgent('H14', 'CM', dm, greed)
+# house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
+# house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
+# house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
+# house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
+# house5 = SimpleProsumerAgent('H5', 'CM', dm, greed)
+# house6 = SimpleProsumerAgent('H6', 'CM', dm, greed)
+# house7 = SimpleProsumerAgent('H7', 'CM', dm, greed)
+# house8 = SimpleProsumerAgent('H8', 'CM', dm, greed)
+# house9 = SimpleProsumerAgent('H9', 'CM', dm, greed)
+# house10 = SimpleProsumerAgent('H10', 'CM', dm, greed)
+# house11 = SimpleProsumerAgent('H11', 'CM', dm, greed)
+# house12 = SimpleProsumerAgent('H12', 'CM', dm, greed)
+# house13 = SimpleProsumerAgent('H13', 'CM', dm, greed)
+# house14 = SimpleProsumerAgent('H14', 'CM', dm, greed)
 
 # Mediator 
-mediator = SimpleCommunityMediator('CM', grid_price=1.8, local_price=1.05, feedin_price=0.3)
+mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3)
 
 #dummy_agent = DummyAgent("DD")
 prosumer_agents = [
-    house1, house2, house3, house4, house5, house6, house7, house8, house9, house10, house11, house12, house13
+    house1, house2, house3, house4, house5, house6, house7, house8, house9, house10, house11, house12, house13, house14
 ]
 
 # Define Network and create connections between Actors
@@ -79,9 +89,7 @@ env = CommunityEnv(
 ##############################################################
 metrics = {}
 
-metrics["H3/utility_prev"] = ph.metrics.SimpleAgentMetric("H3", "utility_prev")
-metrics["H3/reward"] = ph.metrics.SimpleAgentMetric("H3", "reward")
-metrics["H3/actionmask"] = ph.metrics.SimpleAgentMetric("H3", "actionmask")
+metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
 
 metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
 metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
@@ -103,6 +111,9 @@ for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
     metrics[f"{aid}/acc_local_market_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_local_market_coin")
     metrics[f"{aid}/acc_feedin_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_feedin_coin")
+    metrics[f"{aid}/utility_prev"] = ph.metrics.SimpleAgentMetric(aid, "utility_prev")
+    metrics[f"{aid}/reward"] = ph.metrics.SimpleAgentMetric(aid, "reward")
+    metrics[f"{aid}/type"] = ph.metrics.SimpleAgentMetric(aid, "type")
     
 ##############################################################
 # LOGGING
@@ -133,18 +144,17 @@ if sys.argv[1] == "train":
             'follower_agents': follower_agents
         },
         rllib_config={"model": {"custom_model": "torch_action_mask_model"}},
-        ray_config={'dashboard_port': 8265},
         iterations=1000,
         checkpoint_freq=1,
-        policies={"prosumer_policy": ["H3"]},
+        policies={"prosumer_policy": follower_agents},
         metrics=metrics,
-        results_dir="~/ray_results/community_market",
+        results_dir="~/ray_results/community_market_multi2",
         num_workers=1
     )
 
 elif sys.argv[1] == "rollout":
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/community_market/LATEST",
+        directory="~/ray_results/community_market_multi/LATEST",
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
             'network': network,
@@ -160,8 +170,6 @@ elif sys.argv[1] == "rollout":
 
     for rollout in results:
         for aid in follower_agents:
-            if aid != 'H3':
-                continue
             agent_actions = []
             agent_charge = []
             agent_supply = []
@@ -173,12 +181,12 @@ elif sys.argv[1] == "rollout":
             agent_prod = list(rollout.metrics[f"{aid}/current_prod"])
             agent_load = list(rollout.metrics[f"{aid}/current_load"])
             agent_net_loss += list(rollout.metrics[f"{aid}/net_loss"])
-            invalid_actions += list(rollout.metrics[f"{aid}/acc_invalid_actions"])
+            #invalid_actions += list(rollout.metrics[f"{aid}/acc_invalid_actions"])
 
             # Remove None values from agent_actions
             agent_actions = [action for action in agent_actions if action is not None]
             # Plot distribution of agent action per step for all rollouts
-            folder = "output/"
+            folder = f"output/{aid}/"
 
             print(agent_actions)
             plt.hist(agent_actions, bins=6)

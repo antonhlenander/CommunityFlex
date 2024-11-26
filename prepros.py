@@ -80,22 +80,27 @@ def load_production_data(prod_path):
 
     # Generation of solar PV systems and corresponding batteries (this should be random at some point)
     #Random.seed!(1234)
-    #max_cap = np.random.randint(1, 4, size=14)
+    # max_cap = np.random.randint(1, 4, size=14)
     #
-    # max_cap = np.insert(max_cap, 0, 2)
+    #max_cap = np.insert(max_cap, 0, 2)
     # Define production capacity for each house
-    max_cap = [2, 2, 3, 1, 1, 1, 2, 3, 3, 2, 3, 2, 3, 1, 3]
-    print(max_cap)
-    for i in range(1, 15):
-        # Multiply all columns by the max capacity for each
-        df[f'H{i}'] = df[f'H{i}'] * max_cap[i-1]
+    #max_cap = [2, 2, 3, 1, 1, 1, 2, 3, 3, 2, 3, 2, 3, 1, 3]
+    # Output the max_cap list to a file "output.txt"
+    # with open('output.txt', 'w') as f:
+    #     for cap in max_cap:
+    #         f.write(f"{cap}\n")
 
-    # Create a dataframe to store the battery capacities
-    batt_cap_df = pd.DataFrame(columns=[f'H{i}' for i in range(1, 15)])
-    for i in range(1, 15):
-        batt_cap_df.at[0, f'H{i}'] = max_cap[i-1]*5
+    # for i in range(1, 15):
+    #     # Multiply all columns by the max capacity for each
+    #     df[f'H{i}'] = df[f'H{i}'] * max_cap[i-1]
 
-    return df, batt_cap_df
+    # # Create a dataframe to store the battery capacities
+    # batt_cap_df = pd.DataFrame(columns=[f'H{i}' for i in range(1, 15)])
+    # for i in range(1, 15):
+    #     batt_cap_df.at[0, f'H{i}'] = max_cap[i-1]*5
+
+    #return df, batt_cap_df
+    return df
 
 def load_price_data(price_path):
     price_df = pd.read_csv(price_path)

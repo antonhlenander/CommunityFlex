@@ -10,6 +10,7 @@ from datamanager import DataManager
 from market import Market
 from phantom.telemetry import logger
 import time
+import random
 #from datamanager import DataManager
 
 
@@ -211,6 +212,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.battery_cap: float = 0
         self.charge_rate: float = 0
         self.eta = eta
+        self.type: int = 1
 
         # Agent currents
         self.current_load: float = 0 
@@ -552,13 +554,15 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_invalid_actions = 0
         self.acc_grid_interactions = 0
         # Get battery capacity
-        self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
+        self.type = random.randint(1, 3)
+        #self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
+        self.battery_cap = 5 * self.type
         # Get charge rate
         self.charge_rate = self.battery_cap / 4
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
-        self.current_prod = self.dm.get_agent_production(self.id, 0)
+        self.current_prod = self.dm.get_agent_production(self.id, 0)*self.type
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge
@@ -577,7 +581,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Normalization factors
         self.all_max_load = self.dm.get_all_maxdemand()
         self.all_max_prod = self.dm.get_all_maxprod()
-        self.all_max_cap = self.dm.get_all_maxcap()
+        self.all_max_cap = 5*3
 
 ##############################################################
 # Simple Community Mediator Agent
@@ -593,13 +597,13 @@ class SimpleCommunityMediator(ph.Agent):#
             """
             public_info: dict
 
-    def __init__(self, agent_id, grid_price, local_price, feedin_price):
+    def __init__(self, agent_id, grid_price, feedin_price):
         super().__init__(agent_id)
 
         # Store the current grid price
         self.current_grid_price: float = grid_price
         # Current local price
-        self.current_local_price: float = local_price
+        self.current_local_price: float = 0
         # Feedin tariff
         self.feedin_price: float = feedin_price
 
@@ -618,6 +622,13 @@ class SimpleCommunityMediator(ph.Agent):#
     
     # 2nd step in a step
     # def pre_message_resolution(self, ctx: ph.Context):
+
+    def post_message_resolution(self, ctx: ph.Context) -> None:
+        if ctx.env_view.current_step % 48 == 0:
+            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+
+    def reset(self):
+        self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
         
     def handle_batch(
         self, ctx: ph.Context, batch: Sequence[ph.Message]):
