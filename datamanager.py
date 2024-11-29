@@ -54,7 +54,7 @@ class DataManager:
     def get_all_maxprod(self):
         max_df = self.prod_df.iloc[:, 1:]
         max = max_df.max().max()
-        return max
+        return max*3
     
     def get_agent_maxproduction(self, aid):
         return self.prod_df[aid].max()
@@ -63,3 +63,13 @@ class DataManager:
         max = self.batt_cap_df.max().max()
         return max
     
+    def rotate(self):
+        self.demand_df.columns = [f'H{(int(col[1:]) % 14) + 1}' for col in self.demand_df.columns]
+
+# dm = DataManager()
+# print(dm.demand_df.head())
+# for i in range(14):
+#     dm.rotate()
+#     print(dm.demand_df.head())
+
+

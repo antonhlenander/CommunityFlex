@@ -6,7 +6,6 @@ import numpy as np
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent
 from environment import CommunityEnv, SimpleCommunityEnv
 from datamanager import DataManager
-from setup import Setup
 import ray
 
 from ray.rllib.examples.models.action_mask_model import TorchActionMaskModel
@@ -17,22 +16,54 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 # Params
 NUM_EPISODE_STEPS = 48*365
-eta = 0.0 # From AI economist paper - this should be trainable?
+eta = 0.0 # From AI economist paper
 greed = 0.8
-sim_type = 'simple' # 'single' or 'multi'
-rotate = True
-no_agents = 14
+simple = False
 
 dm = DataManager()
+
+# Case of strategic Agents
+house1 = StrategicProsumerAgent('H1', 'CM', dm, eta)
+# house2 = StrategicProsumerAgent('H2', 'CM', dm, eta)
+# house3 = StrategicProsumerAgent('H3', 'CM', dm, eta)
+# house4 = StrategicProsumerAgent('H4', 'CM', dm, eta)
+# house5 = StrategicProsumerAgent('H5', 'CM', dm, eta)
+# house6 = StrategicProsumerAgent('H6', 'CM', dm, eta)
+# house7 = StrategicProsumerAgent('H7', 'CM', dm, eta)
+# house8 = StrategicProsumerAgent('H8', 'CM', dm, eta)
+# house9 = StrategicProsumerAgent('H9', 'CM', dm, eta)
+# house10 = StrategicProsumerAgent('H10', 'CM', dm, eta)
+# house11 = StrategicProsumerAgent('H11', 'CM', dm, eta)
+# house12 = StrategicProsumerAgent('H12', 'CM', dm, eta)
+# house13 = StrategicProsumerAgent('H13', 'CM', dm, eta)
+# house14 = StrategicProsumerAgent('H14', 'CM', dm, eta)
+
+#Simple Agents case
+# house1 = SimpleProsumerAgent('H1', 'CM', dm, greed)
+house2 = SimpleProsumerAgent('H2', 'CM', dm, greed)
+house3 = SimpleProsumerAgent('H3', 'CM', dm, greed)
+house4 = SimpleProsumerAgent('H4', 'CM', dm, greed)
+house5 = SimpleProsumerAgent('H5', 'CM', dm, greed)
+house6 = SimpleProsumerAgent('H6', 'CM', dm, greed)
+house7 = SimpleProsumerAgent('H7', 'CM', dm, greed)
+house8 = SimpleProsumerAgent('H8', 'CM', dm, greed)
+house9 = SimpleProsumerAgent('H9', 'CM', dm, greed)
+house10 = SimpleProsumerAgent('H10', 'CM', dm, greed)
+house11 = SimpleProsumerAgent('H11', 'CM', dm, greed)
+house12 = SimpleProsumerAgent('H12', 'CM', dm, greed)
+house13 = SimpleProsumerAgent('H13', 'CM', dm, greed)
+house14 = SimpleProsumerAgent('H14', 'CM', dm, greed)
 
 # Mediator 
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3)
 
 #dummy_agent = DummyAgent("DD")
-prosumer_agents = Setup.get_agents(sim_type, dm, greed, eta, no_agents)
+prosumer_agents = [
+    house1, house2, house3, house4, house5, house6, house7, house8, house9, house10, house11, house12, house13, house14
+]
 
 # Define Network and create connections between Actors
-agents = [mediator] + prosumer_agents
+agents = [mediator] + prosumer_agents 
 network = ph.Network(agents)
 
 # Connect the agents to the mediator
@@ -47,8 +78,6 @@ env = CommunityEnv(
     network=network, 
     leader_agents=leader_agents,
     follower_agents=follower_agents,
-    dm=dm,
-    rotate=rotate
     )
 
 ##############################################################
@@ -92,6 +121,7 @@ for aid in (follower_agents):
 ##############################################################
 #ph.telemetry.logger.configure_print_logging(print_messages=True, metrics=metrics, enable=True)
 #ph.telemetry.logger.configure_file_logging(file_path="log.json", human_readable=False, metrics=metrics, append=False)
+
 
 ##############################################################
 # RUN VARIABLES
@@ -159,7 +189,7 @@ elif sys.argv[1] == "rollout":
             # Remove None values from agent_actions
             agent_actions = [action for action in agent_actions if action is not None]
             # Plot distribution of agent action per step for all rollouts
-            folder = f"output/H1_2/"
+            folder = f"output/{aid}/"
 
             print(agent_actions)
             plt.hist(agent_actions, bins=6)

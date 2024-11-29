@@ -199,7 +199,13 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 # Strategic RL prosumer agent
 ##############################################################
 class StrategicProsumerAgent(ph.StrategicAgent):
-    def __init__(self, agent_id, mediator_id, data_manager, eta):
+
+    @dataclass
+    class ProsumerSupertype(ph.Supertype):
+        capacity: int = 1
+        eta: float = 0.23
+
+    def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
 
         # Store the ID of the community mediator
@@ -210,9 +216,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
         # Agent properties
         self.battery_cap: float = 0
-        self.charge_rate: float = 0
-        self.eta = eta
-        self.type: int = 1
+        self.charge_rate: float = 1
 
         # Agent currents
         self.current_load: float = 0 
@@ -238,6 +242,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_invalid_actions: int = 0
         self.acc_grid_interactions: int = 0
         self.net_loss: float = 0
+        self.acc_reward: float = 0
 
         # Normalization factors
         self.all_max_load: float = 0
@@ -247,26 +252,11 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Utility
         self.utility_prev: float = 0
 
+        # Reward
         self.reward: float = 0
 
-        self.actionmask: int = 0
-
-        # = [Grid price, Local market price, Feed-in price, 
-        #   Load, PV supply, State of charge, Battery capacity,
-        #   Battery charge/discharge limit, Acc. local market coin, Acc. feed-in coin,
-        #   Acc. lokal market cost, Acc. grid market cost, Acc. number of invalid actions,
-        #   Acc. number of grid interactions]
-        # self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(11,))
-
-        # Observation space
-        # self.observation_space = gym.spaces.Box(
-        #     np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 
-        #     np.array([1, 1, 1, 1, 1, 1, 1, 1, np.inf, np.inf, np.inf, np.inf, np.inf, np.inf]), dtype=np.float32)
-        
-        # = {Buy, Sell, Charge, No-op}
+        # = {Buy, BuyCharge, Sell, SellCharge, Charge, No-op}
         self.action_space = gym.spaces.Discrete(6)
-
-
 
     @property
     def observation_space(self):
@@ -275,13 +265,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 # Can include type here as well in the future maybe
                 "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float64),
 
-                "observations": gym.spaces.Box(low=0.0, high=99999, shape=(14,), dtype=np.float64),
-
-                # "normed_info": gym.spaces.Box(
-                #     low=0.0, high=1, shape=(8,), dtype=np.float64
-                # ),
-                # "user_age": gym.spaces.Box(low=0.0, high=100., shape=(1,), dtype=np.float64),
-                # "user_zipcode": gym.spaces.Box(low=0.0, high=99999., shape=(1,), dtype=np.float64),
+                "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(13,), dtype=np.float64),
             }
         )
 
@@ -293,10 +277,11 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             print("NEGATIVE BUY AMOUNT")
 
 
-    # TODO: fix function
     def sell_power(self, amount):
-        # Cases agent has negative or balanced supply
-        return [(self.mediator_id, SellBid(self.id, round(amount, 2)))]
+        if amount > 0:
+            return [(self.mediator_id, SellBid(self.id, round(amount, 2)))]
+        else:
+            print("NEGATIVE SELL AMOUNT")
     
     # Charge or decharge battery by a certain amount
     def charge_battery(self, amount):
@@ -377,13 +362,6 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             # then it just does not cooperate, but it is a legal action.
             return []
 
-    # def pre_message_resolution(self, ctx: ph.Context):
-    #     # This is after the agent has performed its action i.e. sent messages.
-    #     # But it is before the agent has received the result of its actions!
-    #     # Placeholder code:
-    #     age = ctx[self.mediator_id].public_info[self._current_user_id][
-    #         "age"
-    #     ]
 
     @ph.agents.msg_handler(ClearedBuyBid)
     def handle_cleared_buybid(self, _ctx: ph.Context, msg: ph.Message):
@@ -419,7 +397,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             # Update current load only
             self.current_load = self.dm.get_agent_demand(self.id, hour-1)
             # Update production
-            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)
+            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)*self.type.capacity
             # Update current own supply
             self.current_supply = round(self.current_prod - self.current_load, 2)
             
@@ -443,16 +421,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.curr_invalid_actions = 0
 
 
-    def encode_observation(self, ctx: ph.Context):
-        # Encoding of observations for the action in next step
-        # = [Grid price, Local market price, Feed-in price, 
-        #   Load, PV supply, State of charge, Battery capacity,
-        #   Battery charge/discharge limit, Acc. local market coin, Acc. feed-in coin,
-        #   Acc. lokal market cost, Acc. grid market cost, Acc. number of invalid actions,
-        #   Acc. number of grid interactions]
-        
+    def encode_observation(self, ctx: ph.Context):        
         # Action masking
-
         # Can agent buy to cover its own deficit?
         # Not if it has enough supply.
         if self.current_supply >= 0:
@@ -484,7 +454,6 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             noop = 0
         else:
             noop = 1
-
 
         # Get the public info from the mediator
         grid_price = ctx[self.mediator_id].public_info["grid_price"] / 1.8
@@ -518,27 +487,24 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 acc_local_market_cost,
                 acc_grid_market_cost,
                 acc_grid_interactions], dtype=np.float64),
-            'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float64)  # Only action 1 is allowed
+            'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float64)
         }
-        actionmask = [buy, buy_charge, sell, sell_batt, charge, noop]
 
         return observation
 
     def compute_reward(self, ctx: ph.Context) -> float:
         I_t = self.acc_local_market_coin + self.acc_feedin_coin
         C_t = self.acc_local_market_cost + self.acc_grid_market_cost
-        eta_comp = 1 - self.eta
+        eta_comp = 1 - self.type.eta
         upper_term = (pow(I_t, eta_comp) - 1)
         utility = (upper_term / eta_comp) - C_t
         # Final reward
         marginal_utility = utility - self.utility_prev 
         # Update utility
         self.utility_prev = utility
-        self.reward = marginal_utility
-        #print(marginal_utility)
-        #time.sleep(1)
-        return marginal_utility
-
+        # Normalize reward
+        self.reward = min(marginal_utility/20, 1)
+        return self.reward
 
     def reset(self):
         # Reset statistics
@@ -548,10 +514,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_grid_market_cost = 0
         self.acc_invalid_actions = 0
         self.acc_grid_interactions = 0
-        # Get battery capacity
-        self.type = random.randint(1, 3)
         #self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
-        self.battery_cap = 5 * self.type
+        self.battery_cap = 5 * self.type.capacity
         # Get charge rate
         self.charge_rate = self.battery_cap / 4
         # Get demand data for first step
@@ -577,6 +541,12 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.all_max_load = self.dm.get_all_maxdemand()
         self.all_max_prod = self.dm.get_all_maxprod()
         self.all_max_cap = 5*3
+        # Reward scaling
+        self.reward = 0
+        self.mean = 0.0
+        self.var = 0.0
+        self.count = 0
+        return super().reset()
 
 ##############################################################
 # Simple Community Mediator Agent
@@ -592,7 +562,7 @@ class SimpleCommunityMediator(ph.Agent):#
             """
             public_info: dict
 
-    def __init__(self, agent_id, grid_price, feedin_price):
+    def __init__(self, agent_id, grid_price, feedin_price, train=False):
         super().__init__(agent_id)
 
         # Store the current grid price
@@ -601,6 +571,8 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_local_price: float = 0
         # Feedin tariff
         self.feedin_price: float = feedin_price
+        # Training mode
+        self.train = train
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -614,16 +586,6 @@ class SimpleCommunityMediator(ph.Agent):#
                 "feedin_price": self.feedin_price
             },
         )
-    
-    # 2nd step in a step
-    # def pre_message_resolution(self, ctx: ph.Context):
-
-    def post_message_resolution(self, ctx: ph.Context) -> None:
-        if ctx.env_view.current_step % 48 == 0:
-            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
-
-    def reset(self):
-        self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
         
     def handle_batch(
         self, ctx: ph.Context, batch: Sequence[ph.Message]):
@@ -704,6 +666,16 @@ class SimpleCommunityMediator(ph.Agent):#
             )
 
         return msgs
+    
+
+    def post_message_resolution(self, ctx: ph.Context) -> None:
+        if self.train and ctx.env_view.current_step % 4320 == 0:
+            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+    
+    def reset(self):
+        if self.train:
+            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+        return super().reset()
 
 ##############################################################
 # Simple prosumer agent
@@ -723,6 +695,7 @@ class SimpleProsumerAgent(ph.Agent):
         self.battery_cap: float = 0
         self.charge_rate: float = 0
         self.greed = greed
+        self.type: int = 1
 
         # Agent currents
         self.current_load: float = 0 
@@ -846,7 +819,7 @@ class SimpleProsumerAgent(ph.Agent):
             # Update current load only
             self.current_load = self.dm.get_agent_demand(self.id, hour-1)
             # Update production
-            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)
+            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)*self.type
             # Update current own supply
             self.current_supply = round(self.current_prod - self.current_load, 2)
             
@@ -877,14 +850,15 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_grid_market_cost = 0.0
         self.acc_grid_interactions = 0.0
         self.net_loss = 0.0
+        self.type = random.randint(1, 3)
         # Get battery capacity
-        self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
+        self.battery_cap = 5*self.type
         # Get charge rate
         self.charge_rate = self.battery_cap / 4
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
-        self.current_prod = self.dm.get_agent_production(self.id, 0)
+        self.current_prod = self.dm.get_agent_production(self.id, 0)*self.type
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge

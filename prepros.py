@@ -28,9 +28,14 @@ def load_demand_profile(demand_path):
     df['house_index'] = 'H' + df['house_index'].astype(str)
     # Pivot the dataframe to have a demand column for each house_index
     df = df.pivot(index='hour', columns='house_index', values='demand').reset_index()
+    # Drop the 'hour' column
+    df.drop(columns=['hour'], inplace=True)
     # Return the dataframe
-    # Divide every column from the 3rd column onwards by 1000*60 to convert to kWh
-    df.iloc[:, 1:] = df.iloc[:, 1:] / 1000
+    cols = df.columns.tolist()
+    cols = cols[:1] + cols[6:] + cols[1:6]
+    df = df[cols]
+    # Divide every column from the 3rd column onwards by 1000
+    df.iloc[:] = df.iloc[:] / 1000
     return df
 
 # def load_demand_profile2(demand_path):
@@ -105,3 +110,6 @@ def load_production_data(prod_path):
 def load_price_data(price_path):
     price_df = pd.read_csv(price_path)
     return price_df
+
+# df = load_demand_profile(demand_path)
+# print(df.head())
