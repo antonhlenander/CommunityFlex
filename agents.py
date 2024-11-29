@@ -196,6 +196,135 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
 
 ##############################################################
+# Simple Community Mediator Agent
+# Sets a fixed price for the local market
+##############################################################
+class SimpleCommunityMediator(ph.Agent):#
+    "Stategic Community Mediator Agent"
+
+    @dataclass(frozen=True)
+    class MediatorView(ph.AgentView):
+            """
+            We expose a view of the grid price, local market price and feed-in price to the agents.
+            """
+            public_info: dict
+
+    def __init__(self, agent_id, grid_price, feedin_price, train=False):
+        super().__init__(agent_id)
+
+        # Store the current grid price
+        self.current_grid_price: float = grid_price
+        # Current local price
+        self.current_local_price: float = 0
+        # Feedin tariff
+        self.feedin_price: float = feedin_price
+        # Training mode
+        self.train = train
+
+
+    def view(self, neighbour_id=None) -> ph.View:
+        """@override
+        Create the view for the agents to see the public information.
+        """
+        return self.MediatorView(
+            public_info={
+                "grid_price": self.current_grid_price, 
+                "local_price": self.current_local_price, 
+                "feedin_price": self.feedin_price
+            },
+        )
+        
+    def handle_batch(
+        self, ctx: ph.Context, batch: Sequence[ph.Message]):
+        """@override
+        We override the method `handle_batch` to consume all the bid messages
+        as one block in order to perform the auction. The batch object contains
+        all the messages that were sent to the actor.
+        Note:
+        -----
+        The default logic is to consume each message individually.
+        """
+        buy_bids = []
+        sell_bids = []
+
+        msgs = []
+
+        # Create lists of buy and sell bids
+        for message in batch:
+            if isinstance(message.payload, BuyBid):
+                buy_bids.append(message)
+            elif isinstance(message.payload, SellBid):
+                sell_bids.append(message)
+            else:
+                msgs += self.handle_message(ctx, message)
+
+        if len(buy_bids) > 0 or len(sell_bids) > 0:
+            msgs = self.market_clearing(buy_bids=buy_bids, sell_bids=sell_bids)
+
+        return msgs
+
+
+    def market_clearing(
+        self, buy_bids: Sequence[ph.Message[BuyBid]], sell_bids: Sequence[ph.Message[SellBid]]):   
+        """
+        Encode and decode buy and sell bids and pass to external market clearing mechanism.
+
+        """
+        encoded_buy_bids = []
+        encoded_sell_bids = []
+
+        # ENCODING
+        for bid in buy_bids:
+            tuple = (bid.payload.buyer_id, bid.payload.buy_amount)
+            encoded_buy_bids.append(tuple)
+
+        for bid in sell_bids:
+            tuple = (bid.payload.seller_id, bid.payload.sell_amount)
+            encoded_sell_bids.append(tuple)
+
+        # CLEAR BIDS
+        cleared_buy_bids, cleared_sell_bids, fraction, self_sufficiency = Market.market_clearing(
+            buy_bids=encoded_buy_bids, 
+            sell_bids=encoded_sell_bids,
+            local_price=self.current_local_price,
+            grid_price=self.current_grid_price,
+            feedin_price=self.feedin_price)
+
+        # DECODING
+        msgs = []
+        # Create messages for the cleared buy bids
+        for cleared_buy_bid in cleared_buy_bids:
+            buyer_id, buy_amount, local_amount, local_cost, grid_cost = cleared_buy_bid
+            msgs.append(
+                (
+                    buyer_id,
+                    ClearedBuyBid(buyer_id, buy_amount, round(local_amount, 2), round(local_cost, 2), round(grid_cost, 2)),
+                )
+            )
+        # Create messages for the cleared sell bids
+        for cleared_sell_bid in cleared_sell_bids:
+            seller_id, sell_amount, local_income, grid_income = cleared_sell_bid
+            msgs.append(
+                (
+                    seller_id,
+                    ClearedSellBid(seller_id, sell_amount, round(local_income, 2), round(grid_income, 2)),
+                )
+            )
+
+        return msgs
+    
+
+    def post_message_resolution(self, ctx: ph.Context) -> None:
+        if self.train and ctx.env_view.current_step % 4320 == 0:
+            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+    
+    def reset(self):
+        super().reset()
+        if self.train:
+            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+
+
+##############################################################
 # Strategic RL prosumer agent
 ##############################################################
 class StrategicProsumerAgent(ph.StrategicAgent):
@@ -333,6 +462,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         elif action == 3:
             # Sell from battery and possible surplus production
             sell_amount = self.max_batt_discharge + self.current_supply
+            # Add to self consumption if the agent has negative supply
+            self.self_consumption += abs(min(self.current_supply, 0))
             if sell_amount > 0:
                 self.discharge_battery(min(self.max_batt_discharge, sell_amount))
                 return self.sell_power(sell_amount)
@@ -413,12 +544,12 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         )
         self.avail_energy = self.current_prod + self.max_batt_discharge
         self.surplus_energy = self.avail_energy - self.current_load
-        # Below does not work for strategic agent!
+       
+        # Update self consumption
         if self.current_supply < 0:
             self.self_consumption += self.current_prod
-
-        # Reset invalid actions
-        self.curr_invalid_actions = 0
+        else:
+            self.self_consumption += self.current_load
 
 
     def encode_observation(self, ctx: ph.Context):        
@@ -535,147 +666,17 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
         self.surplus_energy = 0.0
         self.avail_energy = self.current_supply + self.max_batt_discharge
-        #
+        
         self.self_consumption = 0.0
         # Normalization factors
         self.all_max_load = self.dm.get_all_maxdemand()
         self.all_max_prod = self.dm.get_all_maxprod()
         self.all_max_cap = 5*3
-        # Reward scaling
-        self.reward = 0
-        self.mean = 0.0
-        self.var = 0.0
-        self.count = 0
+
         return super().reset()
 
-##############################################################
-# Simple Community Mediator Agent
-# Sets a fixed price for the local market
-##############################################################
-class SimpleCommunityMediator(ph.Agent):#
-    "Stategic Community Mediator Agent"
 
-    @dataclass(frozen=True)
-    class MediatorView(ph.AgentView):
-            """
-            We expose a view of the grid price, local market price and feed-in price to the agents.
-            """
-            public_info: dict
-
-    def __init__(self, agent_id, grid_price, feedin_price, train=False):
-        super().__init__(agent_id)
-
-        # Store the current grid price
-        self.current_grid_price: float = grid_price
-        # Current local price
-        self.current_local_price: float = 0
-        # Feedin tariff
-        self.feedin_price: float = feedin_price
-        # Training mode
-        self.train = train
-
-
-    def view(self, neighbour_id=None) -> ph.View:
-        """@override
-        Create the view for the agents to see the public information.
-        """
-        return self.MediatorView(
-            public_info={
-                "grid_price": self.current_grid_price, 
-                "local_price": self.current_local_price, 
-                "feedin_price": self.feedin_price
-            },
-        )
         
-    def handle_batch(
-        self, ctx: ph.Context, batch: Sequence[ph.Message]):
-        """@override
-        We override the method `handle_batch` to consume all the bid messages
-        as one block in order to perform the auction. The batch object contains
-        all the messages that were sent to the actor.
-        Note:
-        -----
-        The default logic is to consume each message individually.
-        """
-        buy_bids = []
-        sell_bids = []
-
-        msgs = []
-
-        # Create lists of buy and sell bids
-        for message in batch:
-            if isinstance(message.payload, BuyBid):
-                buy_bids.append(message)
-            elif isinstance(message.payload, SellBid):
-                sell_bids.append(message)
-            else:
-                msgs += self.handle_message(ctx, message)
-
-        if len(buy_bids) > 0 or len(sell_bids) > 0:
-            msgs = self.market_clearing(buy_bids=buy_bids, sell_bids=sell_bids)
-
-    
-        return msgs
-
-
-    def market_clearing(
-        self, buy_bids: Sequence[ph.Message[BuyBid]], sell_bids: Sequence[ph.Message[SellBid]]):   
-        """
-        Encode and decode buy and sell bids and pass to external market clearing mechanism.
-
-        """
-        encoded_buy_bids = []
-        encoded_sell_bids = []
-
-        # ENCODING
-        for bid in buy_bids:
-            tuple = (bid.payload.buyer_id, bid.payload.buy_amount)
-            encoded_buy_bids.append(tuple)
-
-        for bid in sell_bids:
-            tuple = (bid.payload.seller_id, bid.payload.sell_amount)
-            encoded_sell_bids.append(tuple)
-
-        # CLEAR BIDS
-        cleared_buy_bids, cleared_sell_bids, fraction, self_sufficiency = Market.market_clearing(
-            buy_bids=encoded_buy_bids, 
-            sell_bids=encoded_sell_bids,
-            local_price=self.current_local_price,
-            grid_price=self.current_grid_price,
-            feedin_price=self.feedin_price)
-
-        # DECODING
-        msgs = []
-        # Create messages for the cleared buy bids
-        for cleared_buy_bid in cleared_buy_bids:
-            buyer_id, buy_amount, local_amount, local_cost, grid_cost = cleared_buy_bid
-            msgs.append(
-                (
-                    buyer_id,
-                    ClearedBuyBid(buyer_id, buy_amount, round(local_amount, 2), round(local_cost, 2), round(grid_cost, 2)),
-                )
-            )
-        # Create messages for the cleared sell bids
-        for cleared_sell_bid in cleared_sell_bids:
-            seller_id, sell_amount, local_income, grid_income = cleared_sell_bid
-            msgs.append(
-                (
-                    seller_id,
-                    ClearedSellBid(seller_id, sell_amount, round(local_income, 2), round(grid_income, 2)),
-                )
-            )
-
-        return msgs
-    
-
-    def post_message_resolution(self, ctx: ph.Context) -> None:
-        if self.train and ctx.env_view.current_step % 4320 == 0:
-            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
-    
-    def reset(self):
-        if self.train:
-            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
-        return super().reset()
 
 ##############################################################
 # Simple prosumer agent
@@ -741,7 +742,6 @@ class SimpleProsumerAgent(ph.Agent):
 
 
     def generate_messages(self, ctx: ph.Context):
-
         # Evaluate greediness of agent.
         if self.current_charge >= self.greed*self.battery_cap:
             # If balanced supply, sell what can be discharged from battery

@@ -29,7 +29,7 @@ class CommunityEnv(ph.StackelbergEnv):
         # Statistics
         avg_price: float # Average price
 
-    def __init__(self, num_steps, network, leader_agents, follower_agents, dm, rotate, **kwargs):
+    def __init__(self, num_steps, network, leader_agents, follower_agents, dm, rotate=False, **kwargs):
         self.current_price = 0.0
         self.current_demand = 0.0
         self.current_covered_demand = 0.0
@@ -68,34 +68,12 @@ class CommunityEnv(ph.StackelbergEnv):
             )
     
     def reset(self):
-        if self.training_single:
+        super().reset()
+        if self.rotate:
             self.dm.rotate()
 
     def pre_message_resolution(self):
         super().pre_message_resolution()
-        #self.current_price = self.agents["CM"].dynamic_price
-        
-    
-        # # Get the current production of the generators
-        # generator_capacities = [
-        #     agent.current_production
-        #     for agent in self.agents.values()
-        #     if isinstance(agent, (GeneratorAgent, StrategicGeneratorAgent))
-        # ]
-        # # Sum the production
-        # self.current_production = np.sum(generator_capacities)
-
-        # Get the current demand of the consumers
-        # consumer_demands = [
-        #     agent.current_demand
-        #     for agent in self.agents.values()
-        #     if isinstance(agent, (ConsumerAgent, StrategicConsumerAgent))
-        # ]
-        # # Sum the demands
-        # self.current_demand = np.sum(consumer_demands)
-        # # Get the cleared price from the exchange agent
-        # self.current_price = self.agents["EX"].clearing_price
-        # # Get the agent and ctx
 
 
 class SimpleCommunityEnv(StackelbergEnvCustom):
@@ -115,7 +93,6 @@ class SimpleCommunityEnv(StackelbergEnvCustom):
         current_hour: int
 
         current_timestamp: str
-
 
         # Statistics
         avg_price: float # Average price

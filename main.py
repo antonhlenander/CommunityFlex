@@ -17,9 +17,9 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 # Params
 NUM_EPISODE_STEPS = 48*365
-eta = 0.0 # From AI economist paper - this should be trainable?
+eta = 0.1 # should this be trainable?
 greed = 0.8
-sim_type = 'simple' # 'single' or 'multi'
+setup_type = 'single' # 'simple' or 'single' or 'multi'
 rotate = True
 no_agents = 14
 
@@ -28,8 +28,7 @@ dm = DataManager()
 # Mediator 
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3)
 
-#dummy_agent = DummyAgent("DD")
-prosumer_agents = Setup.get_agents(sim_type, dm, greed, eta, no_agents)
+prosumer_agents = Setup.get_agents(setup_type, dm, greed, eta, no_agents)
 
 # Define Network and create connections between Actors
 agents = [mediator] + prosumer_agents
@@ -42,14 +41,31 @@ for agent in prosumer_agents:
 leader_agents = ['CM']
 follower_agents = [agent.id for agent in prosumer_agents]
 
-env = CommunityEnv(
+if setup_type == 'simple':
+    env = SimpleCommunityEnv(
     num_steps=NUM_EPISODE_STEPS, 
     network=network, 
     leader_agents=leader_agents,
     follower_agents=follower_agents,
-    dm=dm,
-    rotate=rotate
     )
+if setup_type == 'single':
+    env = CommunityEnv(
+        num_steps=NUM_EPISODE_STEPS, 
+        network=network, 
+        leader_agents=leader_agents,
+        follower_agents=follower_agents,
+        dm=dm,
+        rotate=rotate
+        )
+if setup_type == 'multi':
+    env = CommunityEnv(
+        num_steps=NUM_EPISODE_STEPS, 
+        network=network, 
+        leader_agents=leader_agents,
+        follower_agents=follower_agents,
+        dm=dm,
+        rotate=False
+        )
 
 ##############################################################
 # METRICS
@@ -57,7 +73,6 @@ env = CommunityEnv(
 metrics = {}
 
 metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
-
 metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
 metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
 metrics["env/total_charge"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_charge", group_reduce_action="sum")
