@@ -11,6 +11,7 @@ from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
 
 from ray.rllib.examples.models.action_mask_model import TorchActionMaskModel
 from ray.rllib.models import ModelCatalog
+import os
 
 # Register the model
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
@@ -24,7 +25,7 @@ no_agents = 14
 setup_type = sys.argv[2]
 
 dm = DataManager()
-mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3)
+mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3, local_price=1)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -174,28 +175,28 @@ elif sys.argv[1] == "rollout":
     if setup_type == 'single':
         agent_supertypes.update(
             {
-                f"H1": StrategicProsumerAgent.Supertype(
-                    capacity=UniformFloatSampler(3, 3), # 3 locked for this run
-                    eta=UniformFloatSampler(eta, eta)
+                f"H1": StrategicProsumerAgent.Supertype( # 3 locked for this run
+                    capacity=1,
+                    eta=eta
                 )
             }
         )
+        capsample = UniformIntSampler(1, 4)
+        greedsample = UniformFloatSampler(0.5, 1.0)
         agent_supertypes.update(
             {
                 f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=UniformIntSampler(1, 4),
-                    greed=UniformFloatSampler(0.5, 1.0),
-                    eta=UniformFloatSampler(eta, eta)
-
+                    capacity=capsample.sample(),
+                    greed=greedsample.sample(),
+                    eta=eta
                 )    
                 for i in range(2, 15)
             }
         )
 
     if setup_type == 'single':
-        network.agents[f"H{no_agents}"].rotate = True
+        network.agents[f"H{no_agents}"].rotate = False
 
-    agent_supertypes = {}
     results = ph.utils.rllib.rollout(
         directory="~/ray_results/community_market/LATEST",
         env_class=CommunityEnv,
@@ -232,7 +233,10 @@ elif sys.argv[1] == "rollout":
             # Remove None values from agent_actions
             agent_actions = [action for action in agent_actions if action is not None]
             # Plot distribution of agent action per step for all rollouts
-            folder = f"output/H1_2/"
+            folder = f"output/H1_3/"
+
+            if not os.path.exists(folder):
+                os.makedirs(folder)
 
             print(agent_actions)
             plt.hist(agent_actions, bins=6)

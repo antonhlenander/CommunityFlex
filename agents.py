@@ -209,13 +209,13 @@ class SimpleCommunityMediator(ph.Agent):#
             """
             public_info: dict
 
-    def __init__(self, agent_id, grid_price, feedin_price, train=False):
+    def __init__(self, agent_id, grid_price, feedin_price, local_price=None):
         super().__init__(agent_id)
 
         # Store the current grid price
         self.current_grid_price: float = grid_price
         # Current local price
-        self.current_local_price: float = 1
+        self.current_local_price = local_price
         # Feedin tariff
         self.feedin_price: float = feedin_price
 
@@ -313,15 +313,18 @@ class SimpleCommunityMediator(ph.Agent):#
     
 
     def post_message_resolution(self, ctx: ph.Context) -> None:
-        if ctx.env_view.current_step % 4320 == 0:
+        if ctx.env_view.current_step % 4320 == 0 and self.train:
             self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
             print(f"Simple mediator sampled local price: {self.current_local_price}")
         
     
     def reset(self):
         super().reset()
-        self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
-        print(f"Simple mediator sampled local price: {self.current_local_price}")
+        self.train = False
+        if self.current_local_price is None:
+            self.train = True
+            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+            print(f"Simple mediator sampled local price: {self.current_local_price}")
 
 
 ##############################################################
