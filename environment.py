@@ -29,7 +29,7 @@ class CommunityEnv(ph.StackelbergEnv):
         # Statistics
         avg_price: float # Average price
 
-    def __init__(self, num_steps, network, leader_agents, follower_agents, dm, rotate=False, **kwargs):
+    def __init__(self, num_steps, network, leader_agents, follower_agents, **kwargs):
         self.current_price = 0.0
         self.current_demand = 0.0
         self.current_covered_demand = 0.0
@@ -39,8 +39,6 @@ class CommunityEnv(ph.StackelbergEnv):
         self.current_day = 0
         self.current_hour = 0
         self.current_timestamp = ""
-        self.dm = dm
-        self.rotate = rotate
         # Init stats
         self.avg_price = 0.0
         super().__init__(
@@ -67,13 +65,12 @@ class CommunityEnv(ph.StackelbergEnv):
             **super().view({}).__dict__
             )
     
-    def reset(self):
-        super().reset()
-        if self.rotate:
-            self.dm.rotate()
+    # def reset(self):
+    #     if self.rotate:
+    #         self.dm.rotate()
 
-    def pre_message_resolution(self):
-        super().pre_message_resolution()
+    # def pre_message_resolution(self):
+    #     #super().pre_message_resolution()
 
 
 class SimpleCommunityEnv(StackelbergEnvCustom):

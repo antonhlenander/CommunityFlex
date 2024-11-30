@@ -7,7 +7,7 @@ from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsum
 from environment import CommunityEnv, SimpleCommunityEnv
 from datamanager import DataManager
 from setup import Setup
-import ray
+from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
 
 from ray.rllib.examples.models.action_mask_model import TorchActionMaskModel
 from ray.rllib.models import ModelCatalog
@@ -19,16 +19,14 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 NUM_EPISODE_STEPS = 48*365
 eta = 0.1 # should this be trainable?
 greed = 0.8
-setup_type = 'single' # 'simple' or 'single' or 'multi'
 rotate = True
 no_agents = 14
+setup_type = sys.argv[2]
 
 dm = DataManager()
-
-# Mediator 
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3)
 
-prosumer_agents = Setup.get_agents(setup_type, dm, greed, eta, no_agents)
+prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
 # Define Network and create connections between Actors
 agents = [mediator] + prosumer_agents
@@ -40,32 +38,6 @@ for agent in prosumer_agents:
 
 leader_agents = ['CM']
 follower_agents = [agent.id for agent in prosumer_agents]
-
-if setup_type == 'simple':
-    env = SimpleCommunityEnv(
-    num_steps=NUM_EPISODE_STEPS, 
-    network=network, 
-    leader_agents=leader_agents,
-    follower_agents=follower_agents,
-    )
-if setup_type == 'single':
-    env = CommunityEnv(
-        num_steps=NUM_EPISODE_STEPS, 
-        network=network, 
-        leader_agents=leader_agents,
-        follower_agents=follower_agents,
-        dm=dm,
-        rotate=rotate
-        )
-if setup_type == 'multi':
-    env = CommunityEnv(
-        num_steps=NUM_EPISODE_STEPS, 
-        network=network, 
-        leader_agents=leader_agents,
-        follower_agents=follower_agents,
-        dm=dm,
-        rotate=False
-        )
 
 ##############################################################
 # METRICS
@@ -100,7 +72,7 @@ for aid in (follower_agents):
     metrics[f"{aid}/acc_feedin_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_feedin_coin")
     metrics[f"{aid}/utility_prev"] = ph.metrics.SimpleAgentMetric(aid, "utility_prev")
     metrics[f"{aid}/reward"] = ph.metrics.SimpleAgentMetric(aid, "reward")
-    metrics[f"{aid}/type"] = ph.metrics.SimpleAgentMetric(aid, "type")
+    metrics[f"{aid}/type.capacity"] = ph.metrics.SimpleAgentMetric(aid, "type.capacity")
     
 ##############################################################
 # LOGGING
@@ -111,16 +83,58 @@ for aid in (follower_agents):
 ##############################################################
 # RUN VARIABLES
 ##############################################################
-observations = env.reset()
 rewards = {}
 infos = {}
 
+# I think this should be the same for training 1 agent and all agents?
+
+    
 ##############################################################
 # EXECUTE
-#TODO: Add supertypes and adjust entropy coeef??
+# TODO: Entropy schedule?
+# TODO: CommunityMediator sets random price every 3rd month hardcoded!
 ##############################################################
 
 if sys.argv[1] == "train":
+    agent_supertypes = {}
+    if setup_type == 'multi':
+        agent_supertypes.update(
+            {
+                f"H{i}": StrategicProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 4),
+                    eta=UniformFloatSampler(eta, eta)
+                )    
+                for i in range(1, 15)
+            }
+        )
+    
+    if setup_type == 'single':
+        agent_supertypes.update(
+            {
+                f"H1": StrategicProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 4),
+                    eta=UniformFloatSampler(eta, eta)
+                )
+            }
+        )
+        agent_supertypes.update(
+            {
+                f"H{i}": SimpleProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 4),
+                    greed=UniformFloatSampler(0.5, 1.0),
+                    eta=UniformFloatSampler(eta, eta)
+
+                )    
+                for i in range(2, 15)
+            }
+        )
+
+    if setup_type == 'single':
+        policies = {"prosumer_policy": ["H1"]}
+        network.agents[f"H{no_agents}"].rotate = True
+    if setup_type == 'multi':
+        policies = {"prosumer_policy": follower_agents}
+
     ph.utils.rllib.train(
         algorithm="PPO",
         env_class=CommunityEnv,
@@ -128,26 +142,69 @@ if sys.argv[1] == "train":
             'num_steps': NUM_EPISODE_STEPS,
             'network': network,
             'leader_agents': leader_agents,
-            'follower_agents': follower_agents
+            'follower_agents': follower_agents,
+            'agent_supertypes': agent_supertypes,
+  
         },
         rllib_config={"model": {"custom_model": "torch_action_mask_model"},
-                      "lr": 0.00001, "entropy_coeff": 0.001, "lambda": 0.95},
+                      "lr": 0.00001, "entropy_coeff": 0.002, "lambda": 0.95},
         iterations=1000,
         checkpoint_freq=1,
-        policies={"prosumer_policy": follower_agents},
+        policies=policies,
         metrics=metrics,
-        results_dir="~/ray_results/community_market",
+        results_dir="~/ray_results/community_market_multi",
         num_workers=1
     )
 
+
 elif sys.argv[1] == "rollout":
+
+    agent_supertypes = {}
+    if setup_type == 'multi':
+        agent_supertypes.update(
+            {
+                f"H{i}": StrategicProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 4),
+                    eta=UniformFloatSampler(eta, eta)
+                )    
+                for i in range(1, 15)
+            }
+        )
+    
+    if setup_type == 'single':
+        agent_supertypes.update(
+            {
+                f"H1": StrategicProsumerAgent.Supertype(
+                    capacity=UniformFloatSampler(3, 3), # 3 locked for this run
+                    eta=UniformFloatSampler(eta, eta)
+                )
+            }
+        )
+        agent_supertypes.update(
+            {
+                f"H{i}": SimpleProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 4),
+                    greed=UniformFloatSampler(0.5, 1.0),
+                    eta=UniformFloatSampler(eta, eta)
+
+                )    
+                for i in range(2, 15)
+            }
+        )
+
+    if setup_type == 'single':
+        network.agents[f"H{no_agents}"].rotate = True
+
+    agent_supertypes = {}
     results = ph.utils.rllib.rollout(
         directory="~/ray_results/community_market/LATEST",
+        env_class=CommunityEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
             'network': network,
             'leader_agents': leader_agents,
-            'follower_agents': follower_agents
+            'follower_agents': follower_agents,
+            'agent_supertypes': agent_supertypes,
         },
         num_repeats=1,
         num_workers=1,
@@ -233,20 +290,49 @@ elif sys.argv[1] == "rollout":
         
 
 elif sys.argv[1] == "test":
+    # Define agent supertypes
+    agent_supertypes = {}
+    agent_supertypes.update(
+        {
+            f"H{i}": SimpleProsumerAgent.Supertype(
+                capacity=UniformIntSampler(1, 4),
+                greed=UniformFloatSampler(0.5, 1.0),
+                eta=UniformFloatSampler(eta, eta)
+
+            )    
+            for i in range(1, 15)
+        },
+    )
+
+    # Define environment
+    env = SimpleCommunityEnv(
+        num_steps=NUM_EPISODE_STEPS, 
+        network=network, 
+        leader_agents=leader_agents,
+        follower_agents=follower_agents,
+        agent_supertypes=agent_supertypes
+    )
+    
     terminate = False
-    while env.current_step < env.num_steps:
-        actions = {
-            agent.id: agent.action_space.sample()
-            for agent in env.strategic_agents
-        }
-        # log simple agent actions?
-        # log messages?
+    episodes = 0
 
-        # Manually pass termination bool
-        if env.current_step+1 == env.num_steps:
-            terminate = True
+    while episodes < 1:
+        observations = env.reset()
+    
+        while env.current_step < env.num_steps:
+            actions = {
+                agent.id: agent.action_space.sample()
+                for agent in env.strategic_agents
+            }
+            # log simple agent actions?
+            # log messages?
 
-        step = env.step(actions, terminate)
-        observations = step.observations
-        rewards = step.rewards
-        infos = step.infos
+            # Manually pass termination bool
+            if env.current_step+1 == env.num_steps:
+                terminate = True
+
+            step = env.step(actions, terminate)
+            observations = step.observations
+            rewards = step.rewards
+            infos = step.infos
+        episodes += 1

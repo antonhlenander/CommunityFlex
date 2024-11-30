@@ -64,6 +64,7 @@ class DataManager:
         return max
     
     def rotate(self):
+        print("Rotating demand profiles")
         self.demand_df.columns = [f'H{(int(col[1:]) % 14) + 1}' for col in self.demand_df.columns]
 
 # dm = DataManager()

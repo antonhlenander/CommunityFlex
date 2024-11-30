@@ -215,11 +215,9 @@ class SimpleCommunityMediator(ph.Agent):#
         # Store the current grid price
         self.current_grid_price: float = grid_price
         # Current local price
-        self.current_local_price: float = 0
+        self.current_local_price: float = 1
         # Feedin tariff
         self.feedin_price: float = feedin_price
-        # Training mode
-        self.train = train
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -315,13 +313,15 @@ class SimpleCommunityMediator(ph.Agent):#
     
 
     def post_message_resolution(self, ctx: ph.Context) -> None:
-        if self.train and ctx.env_view.current_step % 4320 == 0:
+        if ctx.env_view.current_step % 4320 == 0:
             self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+            print(f"Simple mediator sampled local price: {self.current_local_price}")
+        
     
     def reset(self):
         super().reset()
-        if self.train:
-            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+        self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
+        print(f"Simple mediator sampled local price: {self.current_local_price}")
 
 
 ##############################################################
@@ -330,9 +330,9 @@ class SimpleCommunityMediator(ph.Agent):#
 class StrategicProsumerAgent(ph.StrategicAgent):
 
     @dataclass
-    class ProsumerSupertype(ph.Supertype):
+    class Supertype(ph.Supertype):
         capacity: int = 1
-        eta: float = 0.23
+        eta: float = 0.1
 
     def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
@@ -638,6 +638,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         return self.reward
 
     def reset(self):
+        # Reset to sample type
+        super().reset()
+        print(f"Strategic agent {self.id} sampled with cap: {self.type.capacity} & eta: {self.type.eta}")
         # Reset statistics
         self.acc_local_market_coin = 0
         self.acc_feedin_coin = 0
@@ -645,14 +648,15 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_grid_market_cost = 0
         self.acc_invalid_actions = 0
         self.acc_grid_interactions = 0
-        #self.battery_cap = self.dm.get_agent_battery_capacity(self.id)
+        self.acc_reward = 0
+        # Compute battery capacity
         self.battery_cap = 5 * self.type.capacity
-        # Get charge rate
+        # Compute charge rate
         self.charge_rate = self.battery_cap / 4
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
-        self.current_prod = self.dm.get_agent_production(self.id, 0)*self.type
+        self.current_prod = self.dm.get_agent_production(self.id, 0)*self.type.capacity
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge
@@ -663,27 +667,29 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.remain_batt_cap = round(self.battery_cap - self.current_charge, 2)
         self.max_batt_charge = round(min(self.remain_batt_cap, self.charge_rate), 2)
         self.max_batt_discharge = round(min(self.current_charge, self.charge_rate), 2)
-
+        # Reset and get energy currents
         self.surplus_energy = 0.0
         self.avail_energy = self.current_supply + self.max_batt_discharge
-        
         self.self_consumption = 0.0
         # Normalization factors
         self.all_max_load = self.dm.get_all_maxdemand()
         self.all_max_prod = self.dm.get_all_maxprod()
-        self.all_max_cap = 5*3
+        self.all_max_cap = 15
 
-        return super().reset()
-
-
-        
 
 ##############################################################
 # Simple prosumer agent
 ##############################################################
 
 class SimpleProsumerAgent(ph.Agent):
-    def __init__(self, agent_id, mediator_id, data_manager, greed):
+
+    @dataclass
+    class Supertype(ph.Supertype):
+        capacity: int 
+        eta: float 
+        greed: float
+
+    def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
 
         # Store the ID of the community mediator
@@ -695,8 +701,6 @@ class SimpleProsumerAgent(ph.Agent):
         # Agent properties
         self.battery_cap: float = 0
         self.charge_rate: float = 0
-        self.greed = greed
-        self.type: int = 1
 
         # Agent currents
         self.current_load: float = 0 
@@ -722,6 +726,8 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_invalid_actions: int = 0 # just here to not get an error
         self.net_loss: float = 0 
 
+        self.rotate = False
+
 
     # Charge or decharge battery by a certain amount
     def charge_battery(self, amount):
@@ -743,7 +749,7 @@ class SimpleProsumerAgent(ph.Agent):
 
     def generate_messages(self, ctx: ph.Context):
         # Evaluate greediness of agent.
-        if self.current_charge >= self.greed*self.battery_cap:
+        if self.current_charge >= self.type.greed*self.battery_cap:
             # If balanced supply or excess, sell what can be discharged from battery + supply
             if self.current_supply >= 0:
                 amount = self.max_batt_discharge + self.current_supply
@@ -763,7 +769,7 @@ class SimpleProsumerAgent(ph.Agent):
                     return [(self.mediator_id, BuyBid(self.id, abs(self.current_supply)))]
 
         # In the case of battery charge below threshold
-        elif self.current_charge < self.greed*self.battery_cap:
+        elif self.current_charge < self.type.greed*self.battery_cap:
             # If balanced supply, do nothing
             if self.current_supply == 0:
                 return []
@@ -819,7 +825,7 @@ class SimpleProsumerAgent(ph.Agent):
             # Update current load only
             self.current_load = self.dm.get_agent_demand(self.id, hour-1)
             # Update production
-            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)*self.type
+            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)*self.type.capacity
             # Update current own supply
             self.current_supply = round(self.current_prod - self.current_load, 2)
             
@@ -843,6 +849,9 @@ class SimpleProsumerAgent(ph.Agent):
         
         
     def reset(self):
+        # Reset for type
+        super().reset()
+        print(f"Simple agent {self.id} sampled with cap: {self.type.capacity}, greed: {self.type.greed} & eta: {self.type.eta}")
         # Reset statistics
         self.acc_local_market_coin = 0.0
         self.acc_feedin_coin = 0.0
@@ -850,15 +859,14 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_grid_market_cost = 0.0
         self.acc_grid_interactions = 0.0
         self.net_loss = 0.0
-        self.type = random.randint(1, 3)
         # Get battery capacity
-        self.battery_cap = 5*self.type
+        self.battery_cap = 5*self.type.capacity
         # Get charge rate
         self.charge_rate = self.battery_cap / 4
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
-        self.current_prod = self.dm.get_agent_production(self.id, 0)*self.type
+        self.current_prod = self.dm.get_agent_production(self.id, 0)*self.type.capacity
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge
@@ -872,6 +880,8 @@ class SimpleProsumerAgent(ph.Agent):
         self.avail_energy = self.current_supply + self.max_batt_discharge
         #
         self.self_consumption = 0.0
+        if self.rotate:
+            self.dm.rotate()
    
 
 
