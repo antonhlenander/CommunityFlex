@@ -125,6 +125,10 @@ if sys.argv[1] == "simple":
 
 elif sys.argv[1] == "rollout":
 
+    rolloutnumber=0
+    rollouts=10
+    single_cap = [1, 2, 3]
+    
     agent_supertypes = Setup.get_supertypes_eval('single', eta, greed, no_agents, 10, 3)
 
     if setup_type == 'single':
@@ -136,18 +140,18 @@ elif sys.argv[1] == "rollout":
                 )
             }
         )
-    #     capsample = UniformIntSampler(1, 4)
-    #     greedsample = UniformFloatSampler(0.5, 1.0)
-    #     agent_supertypes.update(
-    #         {
-    #             f"H{i}": SimpleProsumerAgent.Supertype(
-    #                 capacity=capsample.sample(),
-    #                 greed=greedsample.sample(),
-    #                 eta=eta
-    #             )    
-    #             for i in range(2, 15)
-    #         }
-    #     )
+        capsample = UniformIntSampler(1, 4)
+        greedsample = UniformFloatSampler(0.5, 1.0)
+        agent_supertypes.update(
+            {
+                f"H{i}": SimpleProsumerAgent.Supertype(
+                    capacity=capsample.sample(),
+                    greed=greedsample.sample(),
+                    eta=eta
+                )    
+                for i in range(2, 15)
+            }
+        )
 
     if setup_type == 'single':
         network.agents[f"H{no_agents}"].rotate = False
