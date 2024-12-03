@@ -244,7 +244,6 @@ class SimpleCommunityMediator(ph.Agent):#
         """
         buy_bids = []
         sell_bids = []
-
         msgs = []
 
         # Create lists of buy and sell bids
@@ -325,6 +324,8 @@ class SimpleCommunityMediator(ph.Agent):#
             self.train = True
             self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
             print(f"Simple mediator sampled local price: {self.current_local_price}")
+        else:
+            print(f"Simple mediator initiated with local price: {self.current_local_price}")
 
 
 ##############################################################
@@ -334,6 +335,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
     @dataclass
     class Supertype(ph.Supertype):
+        demandprofile: int = None
         capacity: int = 1
         eta: float = 0.1
 
@@ -688,13 +690,12 @@ class SimpleProsumerAgent(ph.Agent):
 
     @dataclass
     class Supertype(ph.Supertype):
-        capacity: int 
-        eta: float 
-        greed: float
+        capacity: int = 1
+        eta: float = 0.1
+        greed: float = 0.75
 
     def __init__(self, agent_id, mediator_id, data_manager):
-        super().__init__(agent_id)
-
+        
         # Store the ID of the community mediator
         self.mediator_id = mediator_id
 
@@ -730,6 +731,8 @@ class SimpleProsumerAgent(ph.Agent):
         self.net_loss: float = 0 
 
         self.rotate = False
+        
+        super().__init__(agent_id)
 
 
     # Charge or decharge battery by a certain amount

@@ -4,7 +4,7 @@ import phantom as ph
 import pandas as pd
 import numpy as np
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent
-from environment import CommunityEnv, SimpleCommunityEnv
+import stackelberg_custom
 from datamanager import DataManager
 from setup import Setup
 from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
@@ -24,7 +24,7 @@ rotate = True
 no_agents = 14
 setup_type = sys.argv[2]
 
-dm = DataManager()
+dm = DataManager(demand_path="data/eval/demandprofiles.csv")
 mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3, local_price=1)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
@@ -138,7 +138,7 @@ if sys.argv[1] == "train":
 
     ph.utils.rllib.train(
         algorithm="PPO",
-        env_class=CommunityEnv,
+        env_class=ph.StackelbergEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
             'network': network,
@@ -154,7 +154,6 @@ if sys.argv[1] == "train":
         policies=policies,
         metrics=metrics,
         results_dir="~/ray_results/community_market_multi",
-        num_workers=1
     )
 
 
@@ -199,7 +198,7 @@ elif sys.argv[1] == "rollout":
 
     results = ph.utils.rllib.rollout(
         directory="~/ray_results/community_market/LATEST",
-        env_class=CommunityEnv,
+        env_class=ph.StackelbergEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
             'network': network,
@@ -208,7 +207,6 @@ elif sys.argv[1] == "rollout":
             'agent_supertypes': agent_supertypes,
         },
         num_repeats=1,
-        num_workers=1,
         metrics=metrics,
     )
 
@@ -309,9 +307,9 @@ elif sys.argv[1] == "test":
     )
 
     # Define environment
-    env = SimpleCommunityEnv(
+    env = stackelberg_custom.StackelbergEnvCustom(
         num_steps=NUM_EPISODE_STEPS, 
-        network=network, 
+        network=network,
         leader_agents=leader_agents,
         follower_agents=follower_agents,
         agent_supertypes=agent_supertypes
@@ -320,7 +318,7 @@ elif sys.argv[1] == "test":
     terminate = False
     episodes = 0
 
-    while episodes < 1:
+    while episodes < 10:
         observations = env.reset()
     
         while env.current_step < env.num_steps:
