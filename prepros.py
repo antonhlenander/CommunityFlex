@@ -6,6 +6,7 @@ subfolder = 'data/fullyearPV_singleDemand/'
 demand_path = f'{subfolder}demandprofiles.csv'
 prod_path = f'{subfolder}PV.csv'
 price_path = f'{subfolder}price_data.csv'
+cap_path = 'data/eval/caps.csv'
 
 def load_demand_profile(demand_path):
     print('Loading demand profiles...')
@@ -111,5 +112,12 @@ def load_price_data(price_path):
     price_df = pd.read_csv(price_path)
     return price_df
 
-# df = load_demand_profile(demand_path)
-# print(df.head())
+def load_cap_data(cap_path):
+    cap_df = pd.read_csv(cap_path, delimiter=";", header=0)
+    return cap_df
+
+
+
+
+df = load_cap_data(cap_path)
+print(df.head())

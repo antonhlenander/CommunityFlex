@@ -338,6 +338,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         demandprofile: int = None
         capacity: int = 1
         eta: float = 0.1
+        rollout: int = 0
 
     def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
@@ -392,6 +393,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # = {Buy, BuyCharge, Sell, SellCharge, Charge, No-op}
         self.action_space = gym.spaces.Discrete(6)
 
+        self.episode = 0
+
     @property
     def observation_space(self):
         return gym.spaces.Dict(
@@ -436,6 +439,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def pre_message_resolution(self, ctx: ph.Context) -> None:
         self.self_consumption = 0.0
         self.current_local_bought = 0.0
+        if ctx.env_view.current_step == 1:
+            self.episode += 1
 
     def decode_action(self, ctx: ph.Context, action: np.ndarray):
         #print(action)
@@ -645,7 +650,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def reset(self):
         # Reset to sample type
         super().reset()
-        print(f"Strategic agent {self.id} sampled with cap: {self.type.capacity} & eta: {self.type.eta}")
+        if self.type.rollout == 0:
+            print(f"Simple agent {self.id} sampled with cap: {self.type.capacity}, greed: {self.type.greed} & eta: {self.type.eta}")
         # Reset statistics
         self.acc_local_market_coin = 0
         self.acc_feedin_coin = 0
@@ -654,6 +660,12 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_invalid_actions = 0
         self.acc_grid_interactions = 0
         self.acc_reward = 0
+        self.net_loss = 0
+        #
+        if self.type.rollout == 1:
+            self.type.capacity = self.dm.get_agent_cap(self.id, self.episode)
+            print(f"Agent {self.id} capacity set to {self.type.capacity} for episode {self.episode}")
+        # Get battery capacity
         # Compute battery capacity
         self.battery_cap = 5 * self.type.capacity
         # Compute charge rate
@@ -681,6 +693,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.all_max_prod = self.dm.get_all_maxprod()
         self.all_max_cap = 15
 
+            
+
 
 ##############################################################
 # Simple prosumer agent
@@ -693,6 +707,8 @@ class SimpleProsumerAgent(ph.Agent):
         capacity: int = 1
         eta: float = 0.1
         greed: float = 0.75
+        rollout: int = 0
+
 
     def __init__(self, agent_id, mediator_id, data_manager):
         
@@ -731,6 +747,8 @@ class SimpleProsumerAgent(ph.Agent):
         self.net_loss: float = 0 
 
         self.rotate = False
+
+        self.episode = 0
         
         super().__init__(agent_id)
 
@@ -751,7 +769,8 @@ class SimpleProsumerAgent(ph.Agent):
     def pre_message_resolution(self, ctx: ph.Context) -> None:
         self.self_consumption = 0.0
         self.current_local_bought = 0.0
-
+        if ctx.env_view.current_step == 1:
+            self.episode += 1
 
     def generate_messages(self, ctx: ph.Context):
         # Evaluate greediness of agent.
@@ -857,7 +876,8 @@ class SimpleProsumerAgent(ph.Agent):
     def reset(self):
         # Reset for type
         super().reset()
-        print(f"Simple agent {self.id} sampled with cap: {self.type.capacity}, greed: {self.type.greed} & eta: {self.type.eta}")
+        if self.type.rollout == 0:
+            print(f"Simple agent {self.id} sampled with cap: {self.type.capacity}, greed: {self.type.greed} & eta: {self.type.eta}")
         # Reset statistics
         self.acc_local_market_coin = 0.0
         self.acc_feedin_coin = 0.0
@@ -865,6 +885,10 @@ class SimpleProsumerAgent(ph.Agent):
         self.acc_grid_market_cost = 0.0
         self.acc_grid_interactions = 0.0
         self.net_loss = 0.0
+        #
+        if self.type.rollout == 1:
+            self.type.capacity = self.dm.get_agent_cap(self.id, self.episode)
+            print(f"Agent {self.id} capacity set to {self.type.capacity} for episode {self.episode}")
         # Get battery capacity
         self.battery_cap = 5*self.type.capacity
         # Get charge rate

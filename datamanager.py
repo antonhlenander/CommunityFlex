@@ -8,11 +8,12 @@ prod_path = f'{subfolder}PV.csv'
 price_path = f'{subfolder}price_data.csv'
 
 class DataManager:
-    def __init__(self, demand_path=demand_path, prod_path=prod_path, price_path=price_path):
+    def __init__(self, cap_path, demand_path=demand_path, prod_path=prod_path, price_path=price_path):
         self.demand_df: pd.DataFrame = pp.load_demand_profile(demand_path)
         print("Demand profiles loaded!")
         self.prod_df = pp.load_production_data(prod_path)
         print("Production profiles loaded!")
+        self.cap_df = pp.load_cap_data(cap_path)
         # self.price_df: pd.DataFrame = pp.load_price_data(price_path)
 
     def get_agent_demand(self, aid, step, noise_std=0.1):
@@ -63,6 +64,9 @@ class DataManager:
         max = self.batt_cap_df.max().max()
         return max
     
+    def get_agent_cap(self, aid, rollout):
+        return self.cap_df[aid].iloc[rollout]
+
     def rotate(self):
         print("Rotating demand profiles")
         self.demand_df.columns = [f'H{(int(col[1:]) % 14) + 1}' for col in self.demand_df.columns]
