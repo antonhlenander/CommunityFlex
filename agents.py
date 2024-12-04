@@ -17,7 +17,6 @@ import random
 ##############################################################
 # Strategic Community Mediator Agent
 # Learns a dynamic pricing strategy for the local market
-# TODO: Implement observation space and reward function
 ##############################################################
 class StrategicCommunityMediator(ph.StrategicAgent):
     "Stategic Community Mediator Agent"
@@ -29,18 +28,28 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             """
             public_info: dict
 
-    def __init__(self, agent_id, data_manager):
+    def __init__(self, agent_id, data_manager, grid_price, feedin_price):
         super().__init__(agent_id)
  
         # Store the DataManager to get historical price data
         self.dm: DataManager = data_manager
 
         # Store the current grid price
-        self.current_grid_price: float = 0
+        self.current_grid_price: float = grid_price
         # Current local price
-        self.current_local_price: float = 0
+        self.current_local_price: float = feedin_price
         # Feedin price
         self.feedin_price: float = 0
+        
+        # Variables for reward and observation computation
+        self.prev_price: float = 0
+        self.prev_total_income: float = 0
+        self.prev_total_netloss: float = 0
+        self.prev_total_interactions: int = 0
+
+        # Normalization constants
+        self.all_max_demand = 0
+        self.all_max_prod = 0
 
         # Community net loss
         self.community_net_loss: float = 0
@@ -50,10 +59,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         
         # Include forecast demand data at some point?
         # = [Month, Date, Day, Hour, Cleared Price, Current Production]
-        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(6,))
+        self.observation_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float64)
 
-        # 10 price brackets for now
-        self.action_space = gym.spaces.Discrete(10)
+        # We attempt a continous action space!
+        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,))
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -71,26 +80,21 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
         # Translate the action to a price (the grid price is the maximum price)
-        self.current_local_price = float(action) * self.current_grid_price / 10
+        self.current_local_price = action * self.current_grid_price
 
-    # 2nd step in a step
-    # def pre_message_resolution(self, ctx: ph.Context):
-        
 
     def handle_batch(
         self, ctx: ph.Context, batch: Sequence[ph.Message]):
         """@override
-        We override the method `handle_batch` to consume all the bids messages
+        We override the method `handle_batch` to consume all the bid messages
         as one block in order to perform the auction. The batch object contains
         all the messages that were sent to the actor.
-
         Note:
         -----
         The default logic is to consume each message individually.
         """
         buy_bids = []
         sell_bids = []
-
         msgs = []
 
         # Create lists of buy and sell bids
@@ -102,11 +106,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             else:
                 msgs += self.handle_message(ctx, message)
 
-        if len(buy_bids) > 0 and len(sell_bids) > 0:
+        if len(buy_bids) > 0 or len(sell_bids) > 0:
             msgs = self.market_clearing(buy_bids=buy_bids, sell_bids=sell_bids)
-
-        for msg in msgs:
-            logger.log_msg_send(msg)
 
         return msgs
 
@@ -122,77 +123,106 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         # ENCODING
         for bid in buy_bids:
-            tuple = (bid.payload.buyer_id, bid.payload.mwh, bid.payload.price)
+            tuple = (bid.payload.buyer_id, bid.payload.buy_amount)
             encoded_buy_bids.append(tuple)
 
         for bid in sell_bids:
-            tuple = (bid.payload.seller_id, bid.payload.mwh, bid.payload.price)
+            tuple = (bid.payload.seller_id, bid.payload.sell_amount)
             encoded_sell_bids.append(tuple)
 
         # CLEAR BIDS
-        cleared_buy_bids, cleared_sell_bids = Market.market_clearing(sell_bids=encoded_sell_bids, buy_bids=encoded_buy_bids)
+        cleared_buy_bids, cleared_sell_bids, fraction, self_sufficiency = Market.market_clearing(
+            buy_bids=encoded_buy_bids, 
+            sell_bids=encoded_sell_bids,
+            local_price=self.current_local_price,
+            grid_price=self.current_grid_price,
+            feedin_price=self.feedin_price)
 
         # DECODING
         msgs = []
+        # Create messages for the cleared buy bids
         for cleared_buy_bid in cleared_buy_bids:
-            buyer_id, buy_amount, local_cost, grid_cost = cleared_buy_bid
-            decoded_cleared_buy_bid = ClearedBuyBid(buyer_id, buy_amount, local_cost, grid_cost)
-            # Create message for both seller and buyer
-            msg = (buyer_id, decoded_cleared_buy_bid)
-            msgs.extend(msg)
+            buyer_id, buy_amount, local_amount, local_cost, grid_cost = cleared_buy_bid
+            msgs.append(
+                (
+                    buyer_id,
+                    ClearedBuyBid(buyer_id, buy_amount, round(local_amount, 2), round(local_cost, 2), round(grid_cost, 2)),
+                )
+            )
+        # Create messages for the cleared sell bids
         for cleared_sell_bid in cleared_sell_bids:
             seller_id, sell_amount, local_income, grid_income = cleared_sell_bid
-            decoded_cleared_buy_bid = ClearedBuyBid(seller_id, sell_amount, local_income, grid_income)
-            # Create message for both seller and buyer
-            msg = (buyer_id, decoded_cleared_buy_bid)
-            msgs.extend(msg)
+            msgs.append(
+                (
+                    seller_id,
+                    ClearedSellBid(seller_id, sell_amount, round(local_income, 2), round(grid_income, 2)),
+                )
+            )
 
         return msgs
 
 
     def encode_observation(self, ctx: ph.Context):
-        month = ctx.env_view.current_month
-        date = ctx.env_view.current_date
-        day = ctx.env_view.current_day
-        hour = ctx.env_view.current_hour
-        # Clip the cleared price to be 0 in case of negative prices
-        cleared_price = max(ctx.env_view.current_price, 0) 
-        MAX_BID_PRICE = ctx.env_view.MAX_BID_PRICE
-        
+        total_supply = 0
+        total_netloss = 0
+        total_interactions = 0
+        views = ctx.agent_views.items()
+        for key, view in views:
+            total_supply += view.supply
+            total_netloss += view.net_loss
+            total_interactions += view.interactions
 
-        return np.array(
+        marginal_netloss = total_netloss - self.prev_total_netloss
+        marginal_interactions = total_interactions - self.prev_total_interactions
+
+        prev_price = self.prev_price
+        self.prev_price = self.current_local_price
+        self.prev_total_netloss = total_netloss
+        self.prev_total_interactions = total_interactions
+
+        observation = np.array(
             [
-                float(month / 12),
-                float(date / 31),
-                float(day / 7),
-                float(hour / 23),
-                float(cleared_price / MAX_BID_PRICE),
-                float(self.current_production / self.capacity)
+                prev_price / 1.8,
+                self.current_local_price / 1.8,
+                self.feedin_price / 1.8,
+                self.current_grid_price / 1.8,
+                total_supply / (self.all_max_prod*14),
+                marginal_netloss / 20,
+                marginal_interactions / 14,
             ],
-            dtype=np.float32,
-        )
+            dtype=np.float64
+            )
+        
+        clip_observation = np.clip(observation, -1, 1)
+
+        return clip_observation
 
     def compute_reward(self, ctx: ph.Context) -> float:
-        max_earning = self.capacity * self.marginal_cost
-        costs = self.current_production * self.marginal_cost
-        profit = self.current_earnings - costs
+        total_income = 0
+        # Compute aggregate income
+        views = ctx.agent_views.items()
+        for key, view in views:
+            total_income += view.income
+        # Compute marginal change in income
+        marginal_income = total_income - self.prev_total_income
+        # Update previous income
+        self.prev_total_income = total_income
+        # Normalize reward
+        self.reward = min(marginal_income/140, 1) # TODO: find proper reward scaling
 
-        # Apply sqrt scaling, handling positive and negative profit separately
-        if profit > 0:
-            # Logarithmic scaling for positive profits
-            scaled_reward = np.sqrt(profit/max_earning)
-        elif profit < 0:
-            # Logarithmic scaling for negative profits
-            scaled_reward = -np.sqrt(abs(profit/max_earning))
-        else:
-            # If profit is exactly zero, return zero
-            scaled_reward = 0
-
-        return scaled_reward
+        return marginal_income
 
     def reset(self):
         # Reset statistics
         self.total_earnings = 0
+        # Reset previous variables
+        self.prev_price = 0
+        self.prev_total_income = 0
+        self.prev_total_netloss = 0
+        self.prev_total_interactions = 0
+        # Get normalization
+        self.all_max_demand = self.dm.get_all_maxdemand()
+        self.all_max_prod = self.dm.get_all_maxprod()
 
 
 ##############################################################
@@ -335,10 +365,19 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
     @dataclass
     class Supertype(ph.Supertype):
-        demandprofile: int = None
         capacity: int = 1
         eta: float = 0.1
         rollout: int = 0
+
+    @dataclass(frozen=True)
+    class ProsumerView(ph.AgentView):
+            """
+            We expose a view of the grid price, local market price and feed-in price to the agents.
+            """
+            supply: float
+            net_loss: float
+            income: float
+            interactions: float
 
     def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
@@ -404,6 +443,17 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
                 "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(13,), dtype=np.float64),
             }
+        )
+
+    def view(self, neighbour_id=None) -> ph.View:
+        """@override
+        Create the view for the mediator to compute aggregate info.
+        """
+        return self.ProsumerView(
+            supply = self.current_supply,
+            net_loss = self.net_loss,
+            income = self.acc_feedin_coin+self.acc_local_market_coin,
+            interactions = self.acc_grid_interactions
         )
 
     def buy_power(self, amount):
@@ -651,7 +701,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Reset to sample type
         super().reset()
         if self.type.rollout == 0:
-            print(f"Simple agent {self.id} sampled with cap: {self.type.capacity}, greed: {self.type.greed} & eta: {self.type.eta}")
+            print(f"Strategic agent reset with sample capacity: {self.type.capacity} and eta: {self.type.eta}")
         # Reset statistics
         self.acc_local_market_coin = 0
         self.acc_feedin_coin = 0
@@ -709,6 +759,15 @@ class SimpleProsumerAgent(ph.Agent):
         greed: float = 0.75
         rollout: int = 0
 
+    @dataclass(frozen=True)
+    class ProsumerView(ph.AgentView):
+            """
+            We expose a view of the grid price, local market price and feed-in price to the agents.
+            """
+            supply: float
+            net_loss: float
+            income: float
+            interactions: float
 
     def __init__(self, agent_id, mediator_id, data_manager):
         
@@ -752,6 +811,16 @@ class SimpleProsumerAgent(ph.Agent):
         
         super().__init__(agent_id)
 
+    def view(self, neighbour_id=None) -> ph.View:
+        """@override
+        Create the view for the mediator to compute aggregate info.
+        """
+        return self.ProsumerView(
+            supply = self.current_supply,
+            net_loss = self.net_loss,
+            income = self.acc_feedin_coin+self.acc_local_market_coin,
+            interactions = self.acc_grid_interactions
+        )
 
     # Charge or decharge battery by a certain amount
     def charge_battery(self, amount):

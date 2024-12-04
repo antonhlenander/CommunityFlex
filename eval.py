@@ -60,8 +60,6 @@ metrics["env/min_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "cur
 metrics["env/max_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="max")
 
 for aid in (follower_agents):
-    if aid != 'H1':
-        continue
     metrics[f"{aid}/current_load"] = ph.metrics.SimpleAgentMetric(aid, "current_load")
     metrics[f"{aid}/current_prod"] = ph.metrics.SimpleAgentMetric(aid, "current_prod")
     metrics[f"{aid}/current_supply"] = ph.metrics.SimpleAgentMetric(aid, "current_supply")
@@ -93,10 +91,10 @@ if sys.argv[1] == "simple":
         agent_supertypes.update(
             {
                 f"H1": SimpleProsumerAgent.Supertype( 
-                    capacity=2,
-                    greed=0.75,
+                    #capacity=2,
+                    greed=1,
                     eta=eta,
-                    rollout=0
+                    rollout=1 # should be 0 when evaluating single agent
                 )
             }
         )
@@ -152,6 +150,7 @@ elif sys.argv[1] == "rollout":
     agent_supertypes = {}
 
     if setup_type == 'single':
+        directory = "~/ray_results/community_market/LATEST/"
         agent_supertypes.update(
             {
                 f"H1": StrategicProsumerAgent.Supertype( 
@@ -172,23 +171,23 @@ elif sys.argv[1] == "rollout":
                 for i in range(2, 15)
             }
         )
-        
+
     if setup_type == 'multi':
+        directory = "~/ray_results/community_market_multi/LATEST/"
         agent_supertypes.update(
             {
-                f"H{i}": SimpleProsumerAgent.Supertype(
+                f"H{i}": StrategicProsumerAgent.Supertype(
                     #capacity=2,
-                    greed=0.75,
                     eta=eta,
                     rollout=1
                 )    
-                for i in range(2, 15)
+                for i in range(1, 15)
             }
         )
 
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/community_market/LATEST/",
+        directory=directory,
         env_class=ph.StackelbergEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,

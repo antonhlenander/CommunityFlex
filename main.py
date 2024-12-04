@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import phantom as ph
 import pandas as pd
 import numpy as np
-from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent
+from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent, StrategicCommunityMediator
 import stackelberg_custom
 from datamanager import DataManager
 from setup import Setup
@@ -11,6 +11,7 @@ from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
 
 from ray.rllib.examples.models.action_mask_model import TorchActionMaskModel
 from ray.rllib.models import ModelCatalog
+from ray.rllib.algorithms.ppo import PPOTorchPolicy
 import os
 
 # Register the model
@@ -20,12 +21,12 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 NUM_EPISODE_STEPS = 48*365
 eta = 0.1 # should this be trainable?
 greed = 0.8
-rotate = True
+rotate = False
 no_agents = 14
 setup_type = sys.argv[2]
 
-dm = DataManager(demand_path="data/eval/demandprofiles.csv")
-mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3, local_price=1)
+dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
+mediator = StrategicCommunityMediator('CM', data_manager=dm, grid_price=1.8, feedin_price=0.3)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -46,28 +47,13 @@ follower_agents = [agent.id for agent in prosumer_agents]
 metrics = {}
 
 metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
-metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
-metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
 metrics["env/total_charge"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_charge", group_reduce_action="sum")
 metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_supply", group_reduce_action="sum")
 metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agents, "self_consumption", group_reduce_action="sum")
 metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
-metrics["env/total_avail_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "avail_energy", group_reduce_action="sum")
-metrics["env/total_surplus_energy"] = ph.metrics.AggregatedAgentMetric(follower_agents, "surplus_energy", group_reduce_action="sum")
 metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
-metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
-metrics["env/min_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="min")
-metrics["env/max_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="max")
 
 for aid in (follower_agents):
-    if aid != 'H1':
-        continue
-    metrics[f"{aid}/current_load"] = ph.metrics.SimpleAgentMetric(aid, "current_load")
-    metrics[f"{aid}/current_prod"] = ph.metrics.SimpleAgentMetric(aid, "current_prod")
-    metrics[f"{aid}/current_supply"] = ph.metrics.SimpleAgentMetric(aid, "current_supply")
-    metrics[f"{aid}/current_charge"] = ph.metrics.SimpleAgentMetric(aid, "current_charge")
-    metrics[f"{aid}/self_consumption"] = ph.metrics.SimpleAgentMetric(aid, "self_consumption")
-    metrics[f"{aid}/current_local_bought"] = ph.metrics.SimpleAgentMetric(aid, "current_local_bought")
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
     metrics[f"{aid}/acc_local_market_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_local_market_coin")
     metrics[f"{aid}/acc_feedin_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_feedin_coin")
@@ -93,7 +79,6 @@ infos = {}
 ##############################################################
 # EXECUTE
 # TODO: Entropy schedule?
-# TODO: CommunityMediator sets random price every 3rd month hardcoded!
 ##############################################################
 
 if sys.argv[1] == "train":
@@ -108,33 +93,23 @@ if sys.argv[1] == "train":
                 for i in range(1, 15)
             }
         )
-    
-    if setup_type == 'single':
-        agent_supertypes.update(
-            {
-                f"H1": StrategicProsumerAgent.Supertype(
-                    capacity=UniformIntSampler(1, 4),
-                    eta=UniformFloatSampler(eta, eta)
-                )
-            }
-        )
-        agent_supertypes.update(
-            {
-                f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=UniformIntSampler(1, 4),
-                    greed=UniformFloatSampler(0.5, 1.0),
-                    eta=UniformFloatSampler(eta, eta)
 
-                )    
-                for i in range(2, 15)
-            }
-        )
-
-    if setup_type == 'single':
-        policies = {"prosumer_policy": ["H1"]}
-        network.agents[f"H{no_agents}"].rotate = True
     if setup_type == 'multi':
-        policies = {"prosumer_policy": follower_agents}
+        policies = {
+            "prosumer_policy": (
+                PPOTorchPolicy, 
+                follower_agents, 
+                {
+                    "model_checkpoint_path": "~/ray_results/community_market_multi/LATEST",
+                },
+            ),
+            "mediator_policy": (
+                PPOTorchPolicy, 
+                ["CM"],
+            ),
+        }
+
+
 
     ph.utils.rllib.train(
         algorithm="PPO",
@@ -145,15 +120,18 @@ if sys.argv[1] == "train":
             'leader_agents': leader_agents,
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
-  
         },
-        rllib_config={"model": {"custom_model": "torch_action_mask_model"},
-                      "lr": 0.00001, "entropy_coeff": 0.002, "lambda": 0.95},
-        iterations=1000,
+        rllib_config={
+            "lr": 0.00001,
+            "entropy_coeff": 0.002,
+            "lambda": 0.95,
+        },
+        iterations=200,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        results_dir="~/ray_results/community_market_multi",
+        num_workers=1,
+        results_dir="~/ray_results/community_market_twolevel",
     )
 
 

@@ -20,7 +20,7 @@ def load_demand_profile(demand_path):
         'Net dwelling electricity demand': 'demand'
     }, inplace=True)
     # Convert 'time' column to datetime format
-    df['time'] = pd.to_datetime(df['time'], format="%I:%M:%S %p")
+    df['time'] = pd.to_datetime(df['time'], format="%I.%M.%S %p")
     # Extract the hour from the 'time' column
     df['hour'] = df['time'].dt.hour
     # Group by the hour and get the mean demand for each hour
@@ -118,6 +118,3 @@ def load_cap_data(cap_path):
 
 
 
-
-df = load_cap_data(cap_path)
-print(df.head())
