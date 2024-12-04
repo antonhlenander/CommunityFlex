@@ -62,7 +62,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.observation_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float64)
 
         # We attempt a continous action space!
-        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,))
+        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float64)
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -80,7 +80,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
         # Translate the action to a price (the grid price is the maximum price)
-        self.current_local_price = action * self.current_grid_price
+        self.current_local_price = action[0] * self.current_grid_price
 
 
     def handle_batch(
@@ -179,6 +179,14 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.prev_price = self.current_local_price
         self.prev_total_netloss = total_netloss
         self.prev_total_interactions = total_interactions
+        
+        print(prev_price / 1.8)
+        print(self.current_local_price / 1.8)
+        print(self.feedin_price / 1.8)
+        print(self.current_grid_price / 1.8)
+        print(total_supply / self.all_max_prod)
+        print(marginal_netloss / 20)
+        print(marginal_interactions / 14)
 
         observation = np.array(
             [
@@ -186,16 +194,14 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                 self.current_local_price / 1.8,
                 self.feedin_price / 1.8,
                 self.current_grid_price / 1.8,
-                total_supply / (self.all_max_prod*14),
+                total_supply / self.all_max_prod,
                 marginal_netloss / 20,
                 marginal_interactions / 14,
             ],
             dtype=np.float64
             )
         
-        clip_observation = np.clip(observation, -1, 1)
-
-        return clip_observation
+        return observation
 
     def compute_reward(self, ctx: ph.Context) -> float:
         total_income = 0
@@ -222,7 +228,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.prev_total_interactions = 0
         # Get normalization
         self.all_max_demand = self.dm.get_all_maxdemand()
-        self.all_max_prod = self.dm.get_all_maxprod()
+        self.all_max_prod = self.dm.get_all_maxprod()*14
 
 
 ##############################################################

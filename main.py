@@ -3,11 +3,15 @@ import matplotlib.pyplot as plt
 import phantom as ph
 import pandas as pd
 import numpy as np
+import ray
+
+from trained_policy import TrainedPolicy
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent, StrategicCommunityMediator
 import stackelberg_custom
 from datamanager import DataManager
 from setup import Setup
 from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
+
 
 from ray.rllib.examples.models.action_mask_model import TorchActionMaskModel
 from ray.rllib.models import ModelCatalog
@@ -94,22 +98,25 @@ if sys.argv[1] == "train":
             }
         )
 
+    policy = ray.rllib.policy.Policy.from_checkpoint(
+            "/Users/antonlenander/ray_results/community_market_multi/PPO_CommunityEnv_2024-11-30_11-09-586iub4p4v/checkpoint_000179/policies/prosumer_policy"
+            )
+    #obs = [1. for _ in range(19)]
+    #obs = np.array(obs)
+    #obs = obs.flatten()
+
+    #action = policy.compute_single_action(obs)
+
+    #print(action)
+
     if setup_type == 'multi':
         policies = {
             "prosumer_policy": (
-                PPOTorchPolicy, 
-                follower_agents, 
-                {
-                    "model_checkpoint_path": "~/ray_results/community_market_multi/LATEST",
-                },
+                TrainedPolicy, 
+                follower_agents
             ),
-            "mediator_policy": (
-                PPOTorchPolicy, 
-                ["CM"],
-            ),
+            "mediator_policy": ["CM"]
         }
-
-
 
     ph.utils.rllib.train(
         algorithm="PPO",
