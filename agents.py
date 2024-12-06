@@ -59,10 +59,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         
         # Include forecast demand data at some point?
         # = [Month, Date, Day, Hour, Cleared Price, Current Production]
-        self.observation_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float64)
+        self.observation_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float32)
 
         # We attempt a continous action space!
-        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float64)
+        self.prices = np.linspace(0.3, 1.8, 15)
+        self.action_space = gym.spaces.Discrete(15)
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -80,8 +81,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
         # Translate the action to a price (the grid price is the maximum price)
-        self.current_local_price = action[0] * self.current_grid_price
+        self.current_local_price = self.prices[action]
 
+    def pre_message_resolution(self, ctx: ph.Context) -> None:
+        # Reset stats
+        self.reward = 0
 
     def handle_batch(
         self, ctx: ph.Context, batch: Sequence[ph.Message]):
@@ -161,7 +165,6 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         return msgs
 
-
     def encode_observation(self, ctx: ph.Context):
         total_supply = 0
         total_netloss = 0
@@ -174,19 +177,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         marginal_netloss = total_netloss - self.prev_total_netloss
         marginal_interactions = total_interactions - self.prev_total_interactions
-
         prev_price = self.prev_price
         self.prev_price = self.current_local_price
         self.prev_total_netloss = total_netloss
         self.prev_total_interactions = total_interactions
-        
-        print(prev_price / 1.8)
-        print(self.current_local_price / 1.8)
-        print(self.feedin_price / 1.8)
-        print(self.current_grid_price / 1.8)
-        print(total_supply / self.all_max_prod)
-        print(marginal_netloss / 20)
-        print(marginal_interactions / 14)
 
         observation = np.array(
             [
@@ -195,13 +189,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                 self.feedin_price / 1.8,
                 self.current_grid_price / 1.8,
                 total_supply / self.all_max_prod,
-                marginal_netloss / 20,
+                marginal_netloss / 50,
                 marginal_interactions / 14,
             ],
-            dtype=np.float64
+            dtype=np.float32
             )
-        
-        return observation
+
+        clip_obs = np.clip(observation, -1, 1)
+
+        return clip_obs
 
     def compute_reward(self, ctx: ph.Context) -> float:
         total_income = 0
@@ -214,9 +210,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # Update previous income
         self.prev_total_income = total_income
         # Normalize reward
-        self.reward = min(marginal_income/140, 1) # TODO: find proper reward scaling
-
-        return marginal_income
+        self.reward = min(marginal_income/20, 1) # TODO: find proper reward scaling
+        if marginal_income>20:
+            print(f"Marginal income above bounds!!: {marginal_income}")
+        return self.reward
 
     def reset(self):
         # Reset statistics
@@ -445,9 +442,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         return gym.spaces.Dict(
             {
                 # Can include type here as well in the future maybe
-                "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float64),
+                "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float32),
 
-                "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(13,), dtype=np.float64),
+                "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(13,), dtype=np.float32),
             }
         )
 
@@ -495,8 +492,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def pre_message_resolution(self, ctx: ph.Context) -> None:
         self.self_consumption = 0.0
         self.current_local_bought = 0.0
-        if ctx.env_view.current_step == 1:
-            self.episode += 1
+        # if ctx.env_view.current_step == 1:
+        #     self.episode += 1
 
     def decode_action(self, ctx: ph.Context, action: np.ndarray):
         #print(action)
@@ -683,8 +680,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 acc_feedin_coin,
                 acc_local_market_cost,
                 acc_grid_market_cost,
-                acc_grid_interactions], dtype=np.float64),
-            'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float64)
+                acc_grid_interactions], dtype=np.float32),
+            'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float32)
         }
 
         return observation
@@ -706,8 +703,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def reset(self):
         # Reset to sample type
         super().reset()
-        if self.type.rollout == 0:
-            print(f"Strategic agent reset with sample capacity: {self.type.capacity} and eta: {self.type.eta}")
+        # if self.type.rollout == 0:
+        #     print(f"Strategic agent reset with sample capacity: {self.type.capacity} and eta: {self.type.eta}")
         # Reset statistics
         self.acc_local_market_coin = 0
         self.acc_feedin_coin = 0
@@ -720,7 +717,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         #
         if self.type.rollout == 1:
             self.type.capacity = self.dm.get_agent_cap(self.id, self.episode)
-            print(f"Agent {self.id} capacity set to {self.type.capacity} for episode {self.episode}")
+            #print(f"Agent {self.id} capacity set to {self.type.capacity} for episode {self.episode}")
         # Get battery capacity
         # Compute battery capacity
         self.battery_cap = 5 * self.type.capacity

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import phantom as ph
 import cloudpickle
 import os
-from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent
+from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent, StrategicCommunityMediator
 import stackelberg_custom
 from datamanager import DataManager
 from setup import Setup
@@ -25,7 +25,7 @@ no_agents = 14
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/eval/demandprofiles.csv', cap_path='data/eval/caps.csv')
-mediator = SimpleCommunityMediator('CM', grid_price=1.8, feedin_price=0.3, local_price=1)
+mediator = StrategicCommunityMediator('CM', data_manager=dm, grid_price=1.8, feedin_price=0.3)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -77,8 +77,6 @@ for aid in (follower_agents):
 ##############################################################
 # RUN
 ##############################################################
-
-        
 
 if sys.argv[1] == "simple":
 
@@ -173,7 +171,7 @@ elif sys.argv[1] == "rollout":
         )
 
     if setup_type == 'multi':
-        directory = "~/ray_results/community_market_multi/LATEST/"
+        directory = "~/ray_results/community_market_twolevel/LATEST/"
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(

@@ -61,9 +61,9 @@ for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
     metrics[f"{aid}/acc_local_market_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_local_market_coin")
     metrics[f"{aid}/acc_feedin_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_feedin_coin")
-    metrics[f"{aid}/utility_prev"] = ph.metrics.SimpleAgentMetric(aid, "utility_prev")
-    metrics[f"{aid}/reward"] = ph.metrics.SimpleAgentMetric(aid, "reward")
-    metrics[f"{aid}/type.capacity"] = ph.metrics.SimpleAgentMetric(aid, "type.capacity")
+    #metrics[f"{aid}/utility_prev"] = ph.metrics.SimpleAgentMetric(aid, "utility_prev")
+    #metrics[f"{aid}/reward"] = ph.metrics.SimpleAgentMetric(aid, "reward")
+    #metrics[f"{aid}/type.capacity"] = ph.metrics.SimpleAgentMetric(aid, "type.capacity")
     
 ##############################################################
 # LOGGING
@@ -79,7 +79,7 @@ infos = {}
 
 # I think this should be the same for training 1 agent and all agents?
 
-    
+
 ##############################################################
 # EXECUTE
 # TODO: Entropy schedule?
@@ -98,18 +98,6 @@ if sys.argv[1] == "train":
             }
         )
 
-    policy = ray.rllib.policy.Policy.from_checkpoint(
-            "/Users/antonlenander/ray_results/community_market_multi/PPO_CommunityEnv_2024-11-30_11-09-586iub4p4v/checkpoint_000179/policies/prosumer_policy"
-            )
-    #obs = [1. for _ in range(19)]
-    #obs = np.array(obs)
-    #obs = obs.flatten()
-
-    #action = policy.compute_single_action(obs)
-
-    #print(action)
-
-    if setup_type == 'multi':
         policies = {
             "prosumer_policy": (
                 TrainedPolicy, 
@@ -117,6 +105,24 @@ if sys.argv[1] == "train":
             ),
             "mediator_policy": ["CM"]
         }
+    
+    if setup_type == 'simple':
+        agent_supertypes.update(
+            {
+                f"H{i}": SimpleProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 4),
+                    greed=UniformFloatSampler(0.5, 1),
+                    eta=UniformFloatSampler(eta, eta)
+                )    
+                for i in range(1, 15)
+            }
+        )
+
+        policies = {"mediator_policy": ["CM"]}
+
+    policy = ray.rllib.policy.Policy.from_checkpoint(
+            "/Users/antonlenander/ray_results/community_market_multi/PPO_CommunityEnv_2024-11-30_11-09-586iub4p4v/checkpoint_000179/policies/prosumer_policy"
+            )
 
     ph.utils.rllib.train(
         algorithm="PPO",
@@ -133,14 +139,13 @@ if sys.argv[1] == "train":
             "entropy_coeff": 0.002,
             "lambda": 0.95,
         },
-        iterations=200,
+        iterations=1000,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=1,
+        #num_workers=1,
         results_dir="~/ray_results/community_market_twolevel",
     )
-
 
 elif sys.argv[1] == "rollout":
 
