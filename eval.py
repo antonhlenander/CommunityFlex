@@ -88,26 +88,15 @@ if sys.argv[1] == "simple":
     if setup_type == 'simple':
         agent_supertypes.update(
             {
-                f"H1": SimpleProsumerAgent.Supertype( 
+                f"H{i}": SimpleProsumerAgent.Supertype(
                     #capacity=2,
-                    greed=1,
+                    greed=0.75,
                     eta=eta,
-                    rollout=1 # should be 0 when evaluating single agent
-                )
+                    rollout=1
+                )    
+                for i in range(1, 15)
             }
         )
-
-    agent_supertypes.update(
-        {
-            f"H{i}": SimpleProsumerAgent.Supertype(
-                #capacity=2,
-                greed=0.75,
-                eta=eta,
-                rollout=1
-            )    
-            for i in range(2, 15)
-        }
-    )
 
     # Define run params
     env = stackelberg_custom.StackelbergEnvCustom(
@@ -121,7 +110,7 @@ if sys.argv[1] == "simple":
     infos = {}
     episodes = 0
 
-    while episodes < 10:
+    while episodes < 1:
         terminate = False
         observations = env.reset()
         while env.current_step < env.num_steps:

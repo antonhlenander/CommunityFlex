@@ -582,13 +582,13 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 self.acc_invalid_actions += 1
                 return []
             
-        elif action == 3:
+        elif action == 3:            
             # Sell from battery and possible surplus production
             sell_amount = self.max_batt_discharge + self.current_supply
             # Add to self consumption if the agent has negative supply
             self.self_consumption += abs(min(self.current_supply, 0))
             if sell_amount > 0:
-                self.discharge_battery(min(self.max_batt_discharge, sell_amount))
+                self.discharge_battery(self.max_batt_discharge)
                 return self.sell_power(sell_amount)
             else:
                 self.acc_invalid_actions += 1
@@ -775,7 +775,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Compute battery capacity
         self.battery_cap = 5 * self.type.capacity
         # Compute charge rate
-        self.charge_rate = self.battery_cap / 2
+        self.charge_rate = self.battery_cap / 4
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step
@@ -810,7 +810,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 class SimpleProsumerAgent(ph.Agent):
 
     @dataclass
-    class SimpleAgentSupertype(ph.Supertype):
+    class Supertype(ph.Supertype):
         capacity: int = 1
         eta: float = 0.1
         greed: float = 0.75
