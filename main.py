@@ -155,6 +155,7 @@ if sys.argv[1] == "train":
             'agent_supertypes': agent_supertypes,
         },
         rllib_config={
+            "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.0003,
             "entropy_coeff": 0.002,
             "lambda": 0.95,
