@@ -31,7 +31,7 @@ discount = 0.5 # possibly supertype?
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
-mediator = SimpleCommunityMediator('CM', dm=dm)
+mediator = StrategicCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 

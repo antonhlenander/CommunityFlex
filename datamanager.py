@@ -21,8 +21,8 @@ class DataManager:
         demand_profile = self.demand_df[aid].values
         return demand_profile
     
-    def get_agent_daily_prod(self, aid):
-        prod_profile = self.prod_df[aid].values
+    def get_agent_daily_prod(self, aid, step):
+        prod_profile = self.prod_df[aid].iloc[step:step+24].values
         return prod_profile
     
     def get_all_daily_demand(self):

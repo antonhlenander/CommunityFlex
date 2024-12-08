@@ -20,31 +20,47 @@ import random
 class DSO():
     "Communicates capacity limitation to the Community Mediator"
 
-    def __init__(self, agent_id, dm, discount, local_price=None):
-        super().__init__(agent_id)
-
-        self.dm: DataManager = dm
+    def __init__(self, dm, discount=0.0, local_price=None):
         self.price_array: list = []
 
+        self.dm: DataManager = dm
         # Updates every step
         self.current_grid_price: float 
   
         # Update for every day
         self.daily_prices: list = []
-        self.all_daily_demand: list = []
+        self.all_daily_demand: list = self.dm.get_all_daily_demand()
         self.all_daily_prod: list = []
 
+        self.price_array = self.dm.get_price_array()
+
         # Hourly tariffs
-        self.dso_radius_winter = [0.2296,0.2296,0.2296,0.2296,0.2296,0.2296,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,2.0666,2.0666,2.0666,2.0666,0.6889,0.6889,0.6889]
-        self.dso_radius_summer = [0.2296,0.2296,0.2296,0.2296,0.2296,0.2296,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.8955,0.8955,0.8955,0.8955,0.3444,0.3444,0.3444]
-        self.vindstoed = 0.00375 + 0.000875 + 0.01
+        self.import_tariffs_winter = [0.2296,0.2296,0.2296,0.2296,0.2296,0.2296,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,2.0666,2.0666,2.0666,2.0666,0.6889,0.6889,0.6889]
+        self.import_tariffs_summer = [0.2296,0.2296,0.2296,0.2296,0.2296,0.2296,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.8955,0.8955,0.8955,0.8955,0.3444,0.3444,0.3444]
+        self.export_tariff = 0.00375 + 0.000875 + 0.01
     
-    def post_message_resolution(self, ctx: ph.Context) -> None:
-        if ctx.env_view.current_step % 4320 == 0 and self.train:
-            self.current_local_price = random.uniform(self.feedin_price, self.current_grid_price)
-            print(f"Simple mediator sampled local price: {self.current_local_price}")
-        
-        
+    def compute_residual_demand(self, ctx: ph.Context):
+        # Gets the total demand and supply for the next 24 hours
+        total_prod = 0
+        for aid, view in ctx.agent_views():
+            base_prod += self.dm.get_agent_daily_prod(aid, ctx.env_view.current_step)
+            total_prod += base_prod*view.capacity
+        # Compute the residual demand
+        residual_demand = self.all_daily_demand - total_prod
+        self.residual_demand = residual_demand
+        return residual_demand
+    
+    def compute_capacity_limitation(self, var, ctx: ph.Context):
+        step = ctx.env_view.current_step
+        daily_prices = self.price_array[step:step+24]
+        max_price = np.max(daily_prices)
+        min_price = np.min(daily_prices)
+        mid_price = (max_price + min_price)/2
+        avg_cap = self.residual_demand/24
+        capacity_limitation = avg_cap - var * avg_cap * 2 * (daily_prices - mid_price) / (max_price - min_price)
+        print(capacity_limitation)
+        return capacity_limitation
+
     def reset(self):
         super().reset()
         self.price_array = self.dm.get_price_array()[:24] # Now we just do it for one day to test
@@ -61,27 +77,36 @@ class DSO():
 class StrategicCommunityMediator(ph.StrategicAgent):
     "Stategic Community Mediator Agent"
 
+    @dataclass
+    class Supertype(ph.Supertype):
+        discount: float = 0.5
+        cap_var: float = 0.5
+
     @dataclass(frozen=True)
     class MediatorView(ph.AgentView):
-            """
-            We expose a view of the grid price, local market price and feed-in price to the agents.
-            """
-            public_info: dict
+            current_grid_price: float
+            current_local_price: float
+            current_feedin_price: float
+            discount: float
 
-    def __init__(self, agent_id, data_manager, grid_price, feedin_price):
+    def __init__(self, agent_id, dm):
         super().__init__(agent_id)
  
         # Store the DataManager to get historical price data
-        self.dm: DataManager = data_manager
+        self.dm: DataManager = dm
+        self.dso = DSO(dm)
 
-        self.dso = DSO()
-
-        # Store the current grid price
-        self.current_grid_price: float = grid_price
-        # Current local price
-        self.current_local_price: float = feedin_price
-        # Feedin price
+        self.current_grid_price: float = 0
+        self.current_local_price: float = 0
         self.feedin_price: float = 0
+
+        self.price_array: list = []
+        self.daily_prices: list = []
+
+        self.daily_capacity_limits: list = []
+        self.daily_residual_demand: float
+
+        self.current_grid_price
         
         # Variables for reward and observation computation
         self.prev_price: float = 0
@@ -102,40 +127,24 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # Include forecast demand data at some point?
         self.observation_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float32)
 
-        self.prices = np.ndarray(15)
+        self.prices = np.ndarray(20)
 
         self.action_space = gym.spaces.Discrete(20)
 
 
     def view(self, neighbour_id=None) -> ph.View:
-        """@override
-        Create the view for the agents to see the public information.
-        """
         return self.MediatorView(
-            public_info={
-                "grid_price": self.current_grid_price, 
-                "local_price": self.current_local_price, 
-                "feedin_price": self.feedin_price
-            },
-        )
+            current_grid_price = self.current_grid_price,
+            current_local_price = self.current_local_price,
+            current_feedin_price = self.current_feedin_price,
+            discount = self.type.discount
+            cap_var = self.type.cap_var
+            )
 
     def pre_message_resolution(self, ctx: ph.Context) -> None:
         # Reset stats
         self.reward = 0
 
-    def post_message_resolution(self, ctx):
-        if ctx.env_view.current_step % 2 == 0:
-            # Integer division taking into account odd and even steps
-            sim_step = (ctx.env_view.current_step + 1) // 2
-            # Convert to hours since demand profile is just 24 hours
-            hour = sim_step % 24
-            # Update current load only
-            self.current_load = self.dm.get_agent_demand(self.id, hour-1)
-            # Update production
-            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)*self.type.capacity
-            # Update current own supply
-            self.current_supply = round(self.current_prod - self.current_load, 2)
-    
     def reset(self):
         # Reset statistics
         self.total_earnings = 0
@@ -149,7 +158,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.all_max_prod = self.dm.get_all_maxprod()*14 # TODO:fix 
         self.max_price = self.dm.get_all_max_price() + 2.0666
 
-        self.action_prices = np.linspace(0.3, self.max_price*2, 20)
+        self.price_array = self.dm.get_price_array()
+        # TODO: Let's see what happens if max price is doubled
+        self.action_prices = np.linspace(0.3, self.max_price*2, 20) 
 
 
     # Decode actions is the first method that is called in a step
@@ -158,6 +169,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.current_local_price = self.prices[action]
 
     def encode_observation(self, ctx: ph.Context):
+        if ctx.env_view.current_step == 0:
+            self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
+            self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
+
+
         total_supply = 0
         total_netloss = 0
         total_interactions = 0
@@ -168,16 +184,6 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             total_netloss += view.net_loss
             total_interactions += view.interactions
 
-        # Compute 24 hour forecast
-        # Check if agent was reset
-        if ctx.env_view.current_step == 0:
-            self.dso.compute_daily_production()
-
-        views = ctx.agent_views.items()
-        for key, view in views:
-            total_supply += view.supply
-            total_netloss += view.net_loss
-            total_interactions += view.interactions
     
         marginal_netloss = total_netloss - self.prev_total_netloss
         marginal_interactions = total_interactions - self.prev_total_interactions
@@ -313,9 +319,6 @@ class SimpleCommunityMediator(ph.Agent):#
 
     @dataclass(frozen=True)
     class MediatorView(ph.AgentView):
-            """
-            We expose a view of the grid price, local market price and feed-in price to the agents.
-            """
             current_grid_price: float
             current_local_price: float
             current_feedin_price: float
@@ -337,9 +340,6 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_feedin_price: float
 
     def view(self, neighbour_id=None) -> ph.View:
-        """@override
-        Create the view for the agents to see the public information.
-        """
         return self.MediatorView(
             current_grid_price = self.current_grid_price,
             current_local_price = self.current_local_price,
@@ -352,6 +352,7 @@ class SimpleCommunityMediator(ph.Agent):#
         if ctx.env_view.current_step % 2 == 0: # This really is unnecessary if we only access index, but if we update something else it's probably not that simple
             # Integer division taking into account odd and even steps
             sim_step = (ctx.env_view.current_step + 1) // 2
+            # TODO: The StrategicAgent gets from sim_step-1 and hour-1, they should match
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
             self.current_local_price = self.price_array[sim_step] + (self.import_tariffs[sim_step%24] * (1-self.type.discount))
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
@@ -447,6 +448,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             net_loss: float
             income: float
             interactions: float
+            capacity: int
 
     def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
@@ -523,7 +525,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             supply = self.current_supply,
             net_loss = self.net_loss,
             income = self.acc_feedin_coin+self.acc_local_market_coin,
-            interactions = self.acc_grid_interactions
+            interactions = self.acc_grid_interactions,
+            capacity = self.type.capacity
         )
 
     def buy_power(self, amount):
