@@ -26,6 +26,7 @@ def load_demand_profile(demand_path):
         'Net dwelling electricity demand': 'demand'
     }, inplace=True)
     # Convert 'time' column to datetime format
+    df['time'] = df['time'].str.replace('.', ':')
     df['time'] = pd.to_datetime(df['time'], format="%I:%M:%S %p")
     # Extract the hour from the 'time' column
     df['hour'] = df['time'].dt.hour
