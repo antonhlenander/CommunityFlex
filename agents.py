@@ -102,8 +102,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # Include forecast demand data at some point?
         self.observation_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float32)
 
-        self.prices = np.linspace(0.3, 1.8, 15)
-        self.action_space = gym.spaces.Discrete(15)
+        self.prices = np.ndarray(15)
+
+        self.action_space = gym.spaces.Discrete(20)
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -118,14 +119,107 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             },
         )
 
+    def pre_message_resolution(self, ctx: ph.Context) -> None:
+        # Reset stats
+        self.reward = 0
+
+    def post_message_resolution(self, ctx):
+        if ctx.env_view.current_step % 2 == 0:
+            # Integer division taking into account odd and even steps
+            sim_step = (ctx.env_view.current_step + 1) // 2
+            # Convert to hours since demand profile is just 24 hours
+            hour = sim_step % 24
+            # Update current load only
+            self.current_load = self.dm.get_agent_demand(self.id, hour-1)
+            # Update production
+            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)*self.type.capacity
+            # Update current own supply
+            self.current_supply = round(self.current_prod - self.current_load, 2)
+    
+    def reset(self):
+        # Reset statistics
+        self.total_earnings = 0
+        # Reset previous variables
+        self.prev_price = 0
+        self.prev_total_income = 0
+        self.prev_total_netloss = 0
+        self.prev_total_interactions = 0
+        # Get normalization
+        self.all_max_demand = self.dm.get_all_maxdemand()
+        self.all_max_prod = self.dm.get_all_maxprod()*14 # TODO:fix 
+        self.max_price = self.dm.get_all_max_price() + 2.0666
+
+        self.action_prices = np.linspace(0.3, self.max_price*2, 20)
+
+
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
         # Translate the action to a price (the grid price is the maximum price)
         self.current_local_price = self.prices[action]
 
-    def pre_message_resolution(self, ctx: ph.Context) -> None:
-        # Reset stats
-        self.reward = 0
+    def encode_observation(self, ctx: ph.Context):
+        total_supply = 0
+        total_netloss = 0
+        total_interactions = 0
+        views = ctx.agent_views.items()
+
+        for key, view in views:
+            total_supply += view.supply
+            total_netloss += view.net_loss
+            total_interactions += view.interactions
+
+        # Compute 24 hour forecast
+        # Check if agent was reset
+        if ctx.env_view.current_step == 0:
+            self.dso.compute_daily_production()
+
+        views = ctx.agent_views.items()
+        for key, view in views:
+            total_supply += view.supply
+            total_netloss += view.net_loss
+            total_interactions += view.interactions
+    
+        marginal_netloss = total_netloss - self.prev_total_netloss
+        marginal_interactions = total_interactions - self.prev_total_interactions
+        prev_price = self.prev_price
+        self.prev_price = self.current_local_price
+        self.prev_total_netloss = total_netloss
+        self.prev_total_interactions = total_interactions
+
+        observation = np.array(
+            [
+                prev_price / 1.8,
+                self.current_local_price / 1.8,
+                self.feedin_price / 1.8,
+                self.current_grid_price / 1.8,
+                total_supply / self.all_max_prod,
+                marginal_netloss / 50,
+                marginal_interactions / 14,
+            ],
+            dtype=np.float32
+            )
+
+        clip_obs = np.clip(observation, -1, 1)
+
+        return clip_obs
+    
+    def compute_reward(self, ctx: ph.Context) -> float:
+        total_netloss = 0
+        # Compute aggregate income
+        views = ctx.agent_views.items()
+        for key, view in views:
+            total_netloss += view.net_loss
+        # Compute marginal change in income
+        marginal_netloss = total_netloss - self.prev_total_netloss
+        # Update previous income
+        self.prev_total_netloss = total_netloss
+        # Normalize reward
+        self.reward = min(marginal_netloss/60, 1) # TODO: find proper reward scaling
+        if marginal_netloss>50:
+            print(f"Marginal net loss above bounds!!: {marginal_netloss}")
+        return self.reward
+
+    
 
     def handle_batch(
         self, ctx: ph.Context, batch: Sequence[ph.Message]):
@@ -204,93 +298,6 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             )
 
         return msgs
-
-    def encode_observation(self, ctx: ph.Context):
-        total_supply = 0
-        total_netloss = 0
-        total_interactions = 0
-        views = ctx.agent_views.items()
-
-        for key, view in views:
-            total_supply += view.supply
-            total_netloss += view.net_loss
-            total_interactions += view.interactions
-
-        # Compute 24 hour forecast
-        # Check if agent was reset
-        if ctx.env_view.current_step == 0:
-            self.dso.compute_daily_production()
-
-        views = ctx.agent_views.items()
-        for key, view in views:
-            total_supply += view.supply
-            total_netloss += view.net_loss
-            total_interactions += view.interactions
-    
-        marginal_netloss = total_netloss - self.prev_total_netloss
-        marginal_interactions = total_interactions - self.prev_total_interactions
-        prev_price = self.prev_price
-        self.prev_price = self.current_local_price
-        self.prev_total_netloss = total_netloss
-        self.prev_total_interactions = total_interactions
-
-        observation = np.array(
-            [
-                prev_price / 1.8,
-                self.current_local_price / 1.8,
-                self.feedin_price / 1.8,
-                self.current_grid_price / 1.8,
-                total_supply / self.all_max_prod,
-                marginal_netloss / 50,
-                marginal_interactions / 14,
-            ],
-            dtype=np.float32
-            )
-
-        clip_obs = np.clip(observation, -1, 1)
-
-        return clip_obs
-
-    def post_message_resolution(self, ctx):
-        if ctx.env_view.current_step % 2 == 0:
-            # Integer division taking into account odd and even steps
-            sim_step = (ctx.env_view.current_step + 1) // 2
-            # Convert to hours since demand profile is just 24 hours
-            hour = sim_step % 24
-            # Update current load only
-            self.current_load = self.dm.get_agent_demand(self.id, hour-1)
-            # Update production
-            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)*self.type.capacity
-            # Update current own supply
-            self.current_supply = round(self.current_prod - self.current_load, 2)
-    
-    def compute_reward(self, ctx: ph.Context) -> float:
-        total_netloss = 0
-        # Compute aggregate income
-        views = ctx.agent_views.items()
-        for key, view in views:
-            total_netloss += view.net_loss
-        # Compute marginal change in income
-        marginal_netloss = total_netloss - self.prev_total_netloss
-        # Update previous income
-        self.prev_total_netloss = total_netloss
-        # Normalize reward
-        self.reward = min(marginal_netloss/60, 1) # TODO: find proper reward scaling
-        if marginal_netloss>50:
-            print(f"Marginal net loss above bounds!!: {marginal_netloss}")
-        return self.reward
-
-    def reset(self):
-        # Reset statistics
-        self.total_earnings = 0
-        # Reset previous variables
-        self.prev_price = 0
-        self.prev_total_income = 0
-        self.prev_total_netloss = 0
-        self.prev_total_interactions = 0
-        # Get normalization
-        self.all_max_demand = self.dm.get_all_maxdemand()
-        self.all_max_prod = self.dm.get_all_maxprod()*14
 
 
 ##############################################################

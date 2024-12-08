@@ -129,7 +129,7 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity=UniformIntSampler(1, 4),
+                    capacity=UniformIntSampler(0, 4),
                     eta=UniformFloatSampler(eta, eta)
                 )    
                 for i in range(1, 15)
@@ -138,7 +138,7 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 "CM": SimpleCommunityMediator.Supertype(
-                    discount=UniformFloatSampler(0.5, 0.5)
+                    discount=UniformFloatSampler(0.1, 1)
                 )    
             }
         )
