@@ -194,7 +194,7 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        num_repeats=10,
+        num_repeats=1,
         num_workers=1,
         metrics=metrics,
     )

@@ -27,6 +27,12 @@ class Setup():
                 agent = StrategicProsumerAgent(f'H{i+1}', 'CM', dm)
                 agents.append(agent)
             return agents
+
+        elif setup_type == 'multsing':
+            for i in range(no_agents):
+                agent = StrategicProsumerAgent(f'H{i+1}', 'CM', dm)
+                agents.append(agent)
+            return agents
     
     def get_supertypes_eval(setup_type, eta, greed, no_agents, no_episodes, hardcap=1):
 

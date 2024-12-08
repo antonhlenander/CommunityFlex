@@ -1,3 +1,5 @@
-import numpy as np
 
-print(np.linspace(0.3, 1.8, 15))
+step = 6
+sim_step = (step+1) // 2
+
+print(sim_step)

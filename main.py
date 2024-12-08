@@ -22,20 +22,21 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 48*365
+NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
 no_agents = 14
+discount = 0.5 # possibly supertype?
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
-mediator = StrategicCommunityMediator('CM', data_manager=dm, grid_price=1.8, feedin_price=0.3)
+mediator = SimpleCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
 # Define Network and create connections between Actors
-agents = [mediator] + prosumer_agents
+agents = prosumer_agents + [mediator]
 network = ph.Network(agents)
 
 # Connect the agents to the mediator
@@ -61,6 +62,10 @@ for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
     metrics[f"{aid}/acc_local_market_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_local_market_coin")
     metrics[f"{aid}/acc_feedin_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_feedin_coin")
+    metrics[f"{aid}/acc_local_market_cost"] = ph.metrics.SimpleAgentMetric(aid, "acc_local_market_cost")
+    metrics[f"{aid}/acc_grid_cost"] = ph.metrics.SimpleAgentMetric(aid, "acc_grid_market_cost")
+    metrics[f"{aid}/utility"] = ph.metrics.SimpleAgentMetric(aid, "utility_prev")
+
     #metrics[f"{aid}/utility_prev"] = ph.metrics.SimpleAgentMetric(aid, "utility_prev")
     #metrics[f"{aid}/reward"] = ph.metrics.SimpleAgentMetric(aid, "reward")
     #metrics[f"{aid}/type.capacity"] = ph.metrics.SimpleAgentMetric(aid, "type.capacity")
@@ -120,9 +125,24 @@ if sys.argv[1] == "train":
 
         policies = {"mediator_policy": ["CM"]}
 
-    policy = ray.rllib.policy.Policy.from_checkpoint(
-            "/Users/antonlenander/ray_results/community_market_multi/PPO_CommunityEnv_2024-11-30_11-09-586iub4p4v/checkpoint_000179/policies/prosumer_policy"
-            )
+    if setup_type == 'multsing':
+        agent_supertypes.update(
+            {
+                f"H{i}": StrategicProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 4),
+                    eta=UniformFloatSampler(eta, eta)
+                )    
+                for i in range(1, 15)
+            }
+        )
+        agent_supertypes.update(
+            {
+                "CM": SimpleCommunityMediator.Supertype(
+                    discount=UniformFloatSampler(0.5, 0.5)
+                )    
+            }
+        )
+        policies = {"prosumer_policy": follower_agents}
 
     ph.utils.rllib.train(
         algorithm="PPO",
@@ -135,16 +155,16 @@ if sys.argv[1] == "train":
             'agent_supertypes': agent_supertypes,
         },
         rllib_config={
-            "lr": 0.00001,
+            "lr": 0.0003,
             "entropy_coeff": 0.002,
             "lambda": 0.95,
         },
-        iterations=1000,
+        iterations=200,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
         #num_workers=1,
-        results_dir="~/ray_results/community_market_twolevel",
+        results_dir="~/ray_results/community_flex",
     )
 
 elif sys.argv[1] == "rollout":
