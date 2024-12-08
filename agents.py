@@ -348,6 +348,8 @@ class SimpleCommunityMediator(ph.Agent):#
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
             self.current_local_price = self.price_array[sim_step] + (self.import_tariffs[sim_step%24] * (1-self.type.discount))
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
+            #print(f"Simple mediator updated prices: {self.current_grid_price}, {self.current_local_price}, {self.current_feedin_price}")
+
 
     def reset(self):
         super().reset()
@@ -485,6 +487,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         
         # Utility
         self.utility_prev: float = 0
+        self.max_utility: float = 0
 
         # Reward
         self.reward: float = 0
@@ -738,10 +741,16 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         marginal_utility = utility - self.utility_prev 
         # Update utility
         self.utility_prev = utility
-        if self.utility_prev > 20:
-            print(f"Utility above bounds!!: {self.utility_prev}")
-        # Normalize reward
-        self.reward = min(marginal_utility/20, 1)
+        # print(f"-------------------STEP {ctx.env_view.current_step}-------------------")
+        # if self.utility_prev > 20:
+        #     print(f"Utility above bounds!!: {self.utility_prev}")
+        # if self.utility_prev < -20:
+        #     print(f"Utility below bounds!!: {self.utility_prev}")
+        # self.max_utility = max(self.max_utility, self.utility_prev)
+        # print("MAX UTILITY ACHIEVED: ", self.max_utility)
+        # # Normalize reward
+        # time.sleep(0.1)
+        self.reward = min(marginal_utility/100, 1)
         return self.reward
 
     def reset(self):
@@ -1009,7 +1018,7 @@ class SimpleProsumerAgent(ph.Agent):
         # Get battery capacity
         self.battery_cap = 5*self.type.capacity
         # Get charge rate
-        self.charge_rate = self.battery_cap / 4
+        self.charge_rate = self.battery_cap / 2
         # Get demand data for first step
         self.current_load = self.dm.get_agent_demand(self.id, 0)
         # Get production data for first step

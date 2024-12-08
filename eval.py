@@ -17,7 +17,7 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 
 # Params
-NUM_EPISODE_STEPS = 48*365
+NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.75
 rotate = False
@@ -25,7 +25,7 @@ no_agents = 14
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/eval/demandprofiles.csv', cap_path='data/eval/caps.csv')
-mediator = StrategicCommunityMediator('CM', data_manager=dm, grid_price=1.8, feedin_price=0.3)
+mediator = SimpleCommunityMediator('CM', dm=dm,)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -171,7 +171,7 @@ elif sys.argv[1] == "rollout":
         )
 
     if setup_type == 'multi':
-        directory = "~/ray_results/community_market_twolevel/LATEST/"
+        directory = "~/ray_results/community_flex/LATEST/"
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
@@ -180,6 +180,13 @@ elif sys.argv[1] == "rollout":
                     rollout=1
                 )    
                 for i in range(1, 15)
+            }
+        )
+        agent_supertypes.update(
+            {
+                "CM": SimpleCommunityMediator.Supertype(
+                    discount=0.5
+                )    
             }
         )
 
@@ -201,7 +208,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/"
+    path = f"output/flex"
     if not os.path.exists(path):
         os.makedirs(path)
 
