@@ -60,13 +60,6 @@ class DSO():
         capacity_limitation = avg_cap - var * avg_cap * 2 * (daily_prices - mid_price) / (max_price - min_price)
         print(capacity_limitation)
         return capacity_limitation
-
-    def reset(self):
-        super().reset()
-        self.price_array = self.dm.get_price_array()[:24] # Now we just do it for one day to test
-        self.all_daily_demand = self.dm.get_all_daily_demand() # This is always just the same value
-        # Compute the residual demand for timestep 1
-        self.ctx
         
         # The production has to be computed from each agent because of the random capacities.
 
@@ -88,6 +81,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             current_local_price: float
             current_feedin_price: float
             discount: float
+            cap_var: float
 
     def __init__(self, agent_id, dm):
         super().__init__(agent_id)
@@ -113,6 +107,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.prev_total_income: float = 0
         self.prev_total_netloss: float = 0
         self.prev_total_interactions: int = 0
+        self.prev_penalty
+        self.current_import
+        self.current_cap_limit
 
         # Normalization constants
         self.all_max_demand = 0
@@ -136,14 +133,38 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         return self.MediatorView(
             current_grid_price = self.current_grid_price,
             current_local_price = self.current_local_price,
-            current_feedin_price = self.current_feedin_price,
-            discount = self.type.discount
+            current_feedin_price = self.feedin_price,
+            discount = self.type.discount,
             cap_var = self.type.cap_var
             )
 
     def pre_message_resolution(self, ctx: ph.Context) -> None:
         # Reset stats
         self.reward = 0
+
+    def post_message_resolution(self, ctx: ph.Context) -> None:
+        step = ctx.env_view.current_step 
+        sim_step = (step + 1) // 2
+        hour = sim_step % 24
+ 
+        # Compute penalty before updating aggregates for next hour
+        self.prev_penalty = max(self.current_import - self.current_cap_limit, 0)*75
+        # Daily Computes
+        # Compute capacity limits for the following day if at end of day
+        if hour == 0:
+            self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
+            self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
+        # Hourly computes
+        if step % 2 == 0:
+            self.current_import = 0
+            views = ctx.agent_views.items()
+            for aid, view in views:
+                self.current_import += view.current_import
+                total_supply += view.supply
+                total_netloss += view.net_loss
+                total_interactions += view.interactions
+
+        self.current_cap_limit = self.daily_capacity_limits[hour]
 
     def reset(self):
         # Reset statistics
@@ -169,9 +190,20 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.current_local_price = self.prices[action]
 
     def encode_observation(self, ctx: ph.Context):
-        if ctx.env_view.current_step == 0:
+        step = ctx.env_view.current_step
+        sim_step = (step + 1) // 2
+        hour = sim_step % 24
+        # Compute first observation after reset
+        # Compute in post message resolution rest of episode
+        if step == 0:
             self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
             self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
+
+
+
+
+        # Compute amount of power above current capacity limitation
+  
 
 
         total_supply = 0
@@ -183,6 +215,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             total_supply += view.supply
             total_netloss += view.net_loss
             total_interactions += view.interactions
+            
 
     
         marginal_netloss = total_netloss - self.prev_total_netloss
@@ -211,6 +244,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     
     def compute_reward(self, ctx: ph.Context) -> float:
         total_netloss = 0
+        
+        # Penalty payment
+
+
+
+
         # Compute aggregate income
         views = ctx.agent_views.items()
         for key, view in views:
@@ -449,6 +488,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             income: float
             interactions: float
             capacity: int
+            current_import: float
 
     def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
@@ -473,6 +513,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.avail_energy: float = 0
         self.surplus_energy: float = 0
         self.current_local_bought: float = 0
+        self.current_import: float = 0
 
         # Agent constraints
         self.remain_batt_cap: float = 0
@@ -526,7 +567,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             net_loss = self.net_loss,
             income = self.acc_feedin_coin+self.acc_local_market_coin,
             interactions = self.acc_grid_interactions,
-            capacity = self.type.capacity
+            capacity = self.type.capacity,
+            current_import = self.current_import
         )
 
     def buy_power(self, amount):
@@ -630,14 +672,16 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     @ph.agents.msg_handler(ClearedBuyBid)
     def handle_cleared_buybid(self, _ctx: ph.Context, msg: ph.Message):
         # Charge battery if agent bought more than load
-        energy_to_charge = msg.payload.buy_amount - abs(self.current_supply)
+        energy_to_charge = msg.payload.buy_amount - abs(min(self.current_supply, 0))
         if energy_to_charge > 0:
             self.charge_battery(energy_to_charge)
         # Update statistics
+        self.current_import += (msg.payload.buy_amount - msg.payload.local_amount)
         self.current_local_bought += msg.payload.local_amount
         self.acc_local_market_cost += msg.payload.local_cost
         self.acc_grid_market_cost += msg.payload.grid_cost
-        self.acc_grid_interactions += 1
+        if self.current_import > 0:
+            self.acc_grid_interactions += 1
 
 
     @ph.agents.msg_handler(ClearedSellBid)
@@ -646,7 +690,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Update statistics
         self.acc_local_market_coin += msg.payload.local_coin
         self.acc_feedin_coin += msg.payload.feedin_coin
-        self.acc_grid_interactions += 1
+        if msg.payload.feedin_coin > 0:
+            self.acc_grid_interactions += 1
 
     def post_message_resolution(self, ctx: ph.Context):
         # We update everything after the messages have been resolved
@@ -659,9 +704,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             # Convert to hours since demand profile is just 24 hours
             hour = sim_step % 24
             # Update current load only
-            self.current_load = self.dm.get_agent_demand(self.id, hour-1)
+            self.current_load = self.dm.get_agent_demand(self.id, hour)
             # Update production
-            self.current_prod = self.dm.get_agent_production(self.id, sim_step-1)*self.type.capacity
+            self.current_prod = self.dm.get_agent_production(self.id, sim_step)*self.type.capacity
             # Update current own supply
             self.current_supply = round(self.current_prod - self.current_load, 2)
             
@@ -778,8 +823,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_reward = 0
         self.net_loss = 0
         #
-        if self.type.rollout == 1:
-            self.type.capacity = self.dm.get_agent_cap(self.id, self.episode)
+        #if self.type.rollout == 1:
+            #self.type.capacity = self.dm.get_agent_cap(self.id, self.episode)
             #print(f"Agent {self.id} capacity set to {self.type.capacity} for episode {self.episode}")
         # Get battery capacity
         # Compute battery capacity

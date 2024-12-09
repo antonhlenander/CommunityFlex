@@ -95,9 +95,19 @@ if sys.argv[1] == "train":
     if setup_type == 'multi':
         agent_supertypes.update(
             {
-                f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity=UniformIntSampler(1, 4),
-                    eta=UniformFloatSampler(eta, eta)
+                f"H{i}": StrategicProsumerAgent.ProsumerSupertype(
+                    capacity = UniformIntSampler(1, 4),
+                    eta=UniformFloatSampler(eta, eta),
+                    rollout=0
+                )    
+                for i in range(1, 15)
+            }
+        )
+        agent_supertypes.update(
+            {
+                f"H{i}": StrategicCommunityMediator.Supertype(
+                    discount=0.5,
+                    cap_var=0.5
                 )    
                 for i in range(1, 15)
             }
@@ -154,12 +164,12 @@ if sys.argv[1] == "train":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        rllib_config={
-            "model": {"custom_model": "torch_action_mask_model"},
-            "lr": 0.00001,
-            "entropy_coeff": 0.002,
-            "lambda": 0.95,
-        },
+        # rllib_config={
+        #     "model": {"custom_model": "torch_action_mask_model"},
+        #     "lr": 0.00001,
+        #     "entropy_coeff": 0.002,
+        #     "lambda": 0.95,
+        # },
         iterations=200,
         checkpoint_freq=1,
         policies=policies,
