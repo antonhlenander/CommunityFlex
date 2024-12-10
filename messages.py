@@ -37,45 +37,23 @@ class SellBid:
 
 @ph.msg_payload()
 class ClearedBuyBid:
-    """
-    A cleared bid designating the amount of kwh at which price
-    and the id of buyer and seller.
-
-    Attributes:
-    -----------
-    amount (float):     the amount of kwh
-    price (float):      price of bid
-    time:               possibly timestamp for bid?
-    local_cost:         cost of the amount of local energy bought
-    grid_cost:          cost of the amount of grid energy bought
-    """
-
     buyer_id: str
     buy_amount: float
     local_amount: float
-    local_cost: float
-    grid_cost: float
+    grid_amount: float
+    prosumer_cost: float # Dynamic price * amount
+    mediator_cost: float
 
 
 @ph.msg_payload()
 class ClearedSellBid:
-    """
-    A cleared bid designating the amount of kwh at which price
-    and the id of buyer and seller.
-
-    Attributes:
-    -----------
-    amount (kwh):       the amount of kwh
-    price (float):      price of bid
-    seller_id (int):    customer id
-    time:               possibly timestamp for bid?
-    """
-
     seller_id: str
     sell_amount: float
-    local_coin: float
-    feedin_coin: float
-
+    local_amount: float
+    grid_amount: float
+    prosumer_income: float # Local price 
+    mediator_income: float # Spot price - export tariff
+   
 @ph.msg_payload()
 class DummyMsg:
     """

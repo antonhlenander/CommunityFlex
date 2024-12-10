@@ -1,6 +1,6 @@
 class Market():
 
-    def market_clearing(buy_bids, sell_bids, local_price, grid_price, feedin_price):
+    def market_clearing(buy_bids, sell_bids, local_price, grid_price, feedin_price, local_tariff):
         """ Buy bids: list of tuples (buyer_id, buy_amount)
             Sell bids: list of tuples (seller_id, sell_amount) 
             Cleared buy bids: list of tuples (buyer_id, buy_amount, local_amount, local_cost, grid_cost)
@@ -15,34 +15,52 @@ class Market():
         cleared_sell_bids = []
 
         fraction = 0.0
-        self_sufficient = False
 
-        # Check if supply exceeds demand
-       
+        # If demand greater than or equal to supply
+        # The grid is used to meet the remaining demand
         if total_supply <= total_demand:
             fraction = total_supply / total_demand
-            self_sufficient = True if fraction == 1.0 else False
             for bid in buy_bids:
-                local_amount = bid[1] * fraction
-                local_cost = local_amount * local_price
-                grid_cost = bid[1] * (1-fraction) * grid_price
-                cleared_buy_bids.append((bid[0], bid[1], local_amount, local_cost, grid_cost))
+                buyer_id = bid[0]
+                buy_amount = bid[1]
+                local_amount = buy_amount * fraction
+                grid_amount = buy_amount * (1-fraction)
+                prosumer_cost = buy_amount * local_price
+                mediator_cost = (grid_amount * grid_price) + (local_amount * local_tariff)
+                cleared_buy_bids.append((buyer_id, buy_amount, local_amount, grid_amount, prosumer_cost, mediator_cost))
             for bid in sell_bids:
-                cleared_sell_bids.append((bid[0], bid[1], bid[1]*local_price, 0))
+                # All sell bids were bought locally
+                seller_id = bid[0]
+                sell_amount = bid[1]
+                local_amount = sell_amount
+                grid_amount = 0
+                prosumer_income = sell_amount * local_price
+                mediator_income = 0
+                cleared_sell_bids.append((seller_id, sell_amount, local_amount, grid_amount, prosumer_income, mediator_income))
 
         # If supply exceeds demand
+        # The excess energy is sold to the grid
         elif total_supply > total_demand:
             fraction = total_demand / total_supply
-            self_sufficient = True
             for bid in buy_bids:
-                # All buy bids supplied with local energy
-                cleared_buy_bids.append((bid[0], bid[1], bid[1], bid[1]*local_price, 0))
+                # All buy bids supplied with purely local energy
+                buyer_id = bid[0]
+                buy_amount = bid[1]
+                local_amount = buy_amount
+                grid_amount = 0
+                prosumer_cost = buy_amount * local_price
+                mediator_cost = local_amount * local_tariff
+                cleared_buy_bids.append((buyer_id, buy_amount, local_amount, grid_amount, prosumer_cost, mediator_cost))
             for bid in sell_bids:
-                local_income = bid[1] * fraction * local_price
-                grid_income = bid[1] * (1-fraction) * feedin_price
-                cleared_sell_bids.append((bid[0], bid[1], local_income, grid_income))
+                seller_id = bid[0]
+                sell_amount = bid[1]
+                local_amount = sell_amount * fraction
+                grid_amount = sell_amount * (1-fraction)
+                prosumer_income = sell_amount * local_price
+                mediator_income = grid_amount * feedin_price 
+                cleared_sell_bids.append((seller_id, sell_amount, local_amount, grid_amount, prosumer_income, mediator_income))
 
-        return cleared_buy_bids, cleared_sell_bids, fraction, self_sufficient
+        return cleared_buy_bids, cleared_sell_bids
 
 # Example check
 
