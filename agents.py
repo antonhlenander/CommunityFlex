@@ -177,8 +177,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
             self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
 
-        # Resets at uneven step at beginning of day to not interfere with observation
-        if hour == 1 and step % 1 == 0:
+        # Resets at even step at beginning of day to not interfere with observation
+        # and reward of CM 
+        if hour == 1 and step % 2 == 0:
             # Reset dailies
             self.daily_mediator_payments = 0
             self.daily_prosumers_payments = 0
