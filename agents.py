@@ -109,7 +109,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.prev_total_interactions: int = 0
 
         self.mediator_netloss: float = 0
-        self.prev_mediator_netloss
+        self.prev_mediator_netloss: float = 0
 
         self.prosumers_netloss: float = 0
         self.prev_prosumers_netloss: float = 0
@@ -126,8 +126,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.budget_balance: float = 0 # 
 
         # More stats
-        self.total_netloss
-        self.total_interactions
+        self.total_netloss = 0
+        self.total_interactions = 0
         # Normalization constants
         self.all_max_demand = 0
         self.all_max_prod = 0
@@ -211,6 +211,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                 self.total_interactions += view.interactions
 
     def reset(self):
+        super().reset()
         # Reset statistics
         self.total_earnings = 0
         # Reset previous variables (needed for reward computations)
@@ -249,14 +250,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         total_netloss = 0
         total_interactions = 0
 
-
-
-        
         views = ctx.agent_views.items()
         for key, view in views:
             total_supply += view.supply
             total_netloss += view.net_loss
             total_interactions += view.interactions
+        print(f"Total supply: {total_supply}")
+        print(f"Total net loss: {total_netloss}")
+        print(f"Total interactions: {total_interactions}")
+        time.sleep(1)
     
         marginal_netloss = total_netloss - self.prev_total_netloss
         marginal_interactions = total_interactions - self.prev_total_interactions
@@ -329,10 +331,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
     def market_clearing(
         self, buy_bids: Sequence[ph.Message[BuyBid]], sell_bids: Sequence[ph.Message[SellBid]]):   
-        """
-        Encode and decode buy and sell bids and pass to external market clearing mechanism.
 
-        """
         encoded_buy_bids = []
         encoded_sell_bids = []
 
@@ -368,6 +367,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             )
             # Update aggregates stats
             self.total_import += grid_amount
+            self.total_local_bought += local_amount
             self.mediator_netloss += mediator_cost
             self.daily_mediator_payments += mediator_cost
 
@@ -787,6 +787,10 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             self.self_consumption += self.current_prod
         else:
             self.self_consumption += self.current_load
+
+        print(f"Agent {self.id} supply: {self.current_supply}")
+        print(f"Agent {self.id} net loss: {self.net_loss}")
+        print(f"Agent {self.id} interactions: {self.acc_grid_interactions}")
 
 
     def encode_observation(self, ctx: ph.Context):        
