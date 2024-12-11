@@ -7,6 +7,8 @@ residual_demand = 25
 daily_prices = [1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5, 4, 3, 2]
 var = 1
 
+daily_residual_demand = [5,5,5,5,5]
+
 
 
 def compute_capacity_limitation():
@@ -19,4 +21,6 @@ def compute_capacity_limitation():
     return capacity_limitation
 
 
-print(compute_capacity_limitation())
+daily_caps = np.divide(daily_residual_demand, residual_demand)
+
+print(daily_caps)

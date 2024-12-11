@@ -103,6 +103,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.daily_capacity_limits: list = []
         self.daily_residual_demand: float
         self.current_cap_limit: float = 0
+        self.capacity_balance: float = 0
 
         # Variables for reward and observation computation
         self.prev_price: float = 0
@@ -117,8 +118,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.prev_penalty: float = 0
 
         # Aggregates
-        self.total_import: float = 0
-        self.total_export: float = 0
+        self.current_total_import: float = 0
+        self.current_total_export: float = 0
         
         # Daily budget balance
         self.daily_mediator_payments: float = 0 # Grid side payments
@@ -132,14 +133,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.all_max_demand = 0
         self.all_max_prod = 0
 
+        # Finding normalization constants
+        self.max_balance = 0
+        self.max_reward = 0
+
         # Community net loss
         self.community_net_loss: float = 0
 
         # Community self-sufficiency
         self.community_self_sufficiency: float = 0
-        
-        # Include forecast demand data at some point?
-        self.observation_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float32)
 
         self.prices = np.ndarray(20)
 
@@ -155,161 +157,37 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             cap_var = self.type.cap_var
             )
 
+    @property
+    def observation_space(self):
+        return gym.spaces.Dict(
+            {
+                "daily_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(24,), dtype=np.float32),
+                "infos": gym.spaces.Box(low=-1.0, high=1.0, shape=(11,), dtype=np.float32),
+            }
+        )
+
     def pre_message_resolution(self, ctx: ph.Context) -> None:
-        # Reset stats
-        self.reward = 0
-
-    def post_message_resolution(self, ctx: ph.Context) -> None:
-        step = ctx.env_view.current_step 
-        sim_step = (step + 1) // 2
-        hour = ((sim_step-1) % 24) + 1
-
-        # Compute penalty before updating aggregates for next hour
-
-        # DAILY COMPUTES AT END OF DAY
-        ###############################################################
-
-        # Computations at even step for CM to observe at beginning of the next day
-        if hour == 24 and step % 2 == 0:
-            # Compute the final budget for the ending day
-            self.budget_balance = self.daily_grid - self.daily_local
-            # Compute capacity limits for the following day if at end of day
-            self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
-            self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
-
-        # Resets at even step at beginning of day to not interfere with observation
-        # and reward of CM 
-        if hour == 1 and step % 2 == 0:
-            # Reset dailies
-            self.daily_mediator_payments = 0
-            self.daily_prosumers_payments = 0
-            # Reset budget balance
-            self.budget_balance = 0
-
-
-        # HOURLY COMPUTES AT EVEN STEPS 
-        # i.e. at step 2 these are computed, such that CM agent can observe for its action in step 3.
-        # these computes are updated after all prosumer agents make their updates, such that aggregates match
-        ##################################################################                         
-        if step % 2 == 0:
-            self.penalty = max(self.total_import - self.current_cap_limit, 0)*75
-            self.mediator_netloss += self.penalty
-            self.daily_mediator_payments += self.penalty
-            # Resets
-            self.total_import = 0
-            self.total_export = 0
-            self.total_supply = 0
-            self.total_netloss = 0
-            self.total_interactions = 0
-            # Updates
-            self.current_cap_limit = self.daily_capacity_limits[hour%24]
-            self.current_local_tariff = self.dso.import_tariffs_winter[hour%24]
-            views = ctx.agent_views.items()
-            for aid, view in views:
-                self.total_supply += view.supply
-                self.total_netloss += view.net_loss
-                self.total_interactions += view.interactions
-
-    def reset(self):
-        super().reset()
-        # Reset statistics
-        self.total_earnings = 0
-        # Reset previous variables (needed for reward computations)
-        self.prev_price = 0
-        self.prev_total_income = 0
-        self.prev_total_netloss = 0
-        self.prev_total_interactions = 0
-        # Get normalization
-        self.all_max_demand = self.dm.get_all_maxdemand()
-        self.all_max_prod = self.dm.get_all_maxprod()*14 # TODO:fix 
-        self.max_price = self.dm.get_all_max_price() + 2.0666
-
-        self.price_array = self.dm.get_price_array()
-        self.current_local_tariff = self.dso.import_tariffs_winter[0]
-        # TODO: Let's see what happens if max price is doubled
-        self.action_prices = np.linspace(0.3, self.max_price*2, 20) 
-
-
-    # Decode actions is the first method that is called in a step
-    def decode_action(self, ctx: ph.Context, action):
-        # Translate the action to a price (the grid price is the maximum price)
-        self.current_local_price = self.prices[action]
-
-    def encode_observation(self, ctx: ph.Context):
+        # Reset all reward computations stats here at beginning of day
         step = ctx.env_view.current_step
         sim_step = (step + 1) // 2
         hour = ((sim_step-1) % 24) + 1
-        # Compute first observation after reset
-        # Compute in post message resolution rest of episode
-        if step == 0:
-            self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
-            self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
 
-        # Compute amount of power above current capacity limitation
-        total_supply = 0
-        total_netloss = 0
-        total_interactions = 0
+        # Resetting statistics at odd step start of day
+        ###############################################################
+        if hour == 1 and step % 2 == 1:
+            # Reset the budget balance
+            self.budget_balance = 0
+            self.daily_mediator_payments = 0
+            self.daily_prosumers_payments = 0
 
-        views = ctx.agent_views.items()
-        for key, view in views:
-            total_supply += view.supply
-            total_netloss += view.net_loss
-            total_interactions += view.interactions
-        print(f"Total supply: {total_supply}")
-        print(f"Total net loss: {total_netloss}")
-        print(f"Total interactions: {total_interactions}")
-        time.sleep(1)
-    
-        marginal_netloss = total_netloss - self.prev_total_netloss
-        marginal_interactions = total_interactions - self.prev_total_interactions
-        prev_price = self.prev_price
-        self.prev_price = self.current_local_price
-        self.prev_total_netloss = total_netloss
-        self.prev_total_interactions = total_interactions
-
-        observation = np.array(
-            [
-                prev_price / 1.8,
-                self.current_local_price / 1.8,
-                self.feedin_price / 1.8,
-                self.current_grid_price / 1.8,
-                total_supply / self.all_max_prod,
-                marginal_netloss / 50,
-                marginal_interactions / 14,
-            ],
-            dtype=np.float32
-            )
-
-        clip_obs = np.clip(observation, -1, 1)
-
-        return clip_obs
-    
-    def compute_reward(self, ctx: ph.Context) -> float:
-        # Budget balance
-        # 1. Minimize cost
-        # 2. Balance income and cost
-        balance = self.daily_prosumers_payments - self.daily_mediator_payments
-        # Compute marginal change in overall netloss
-        marginal_netloss = self.prev_mediator_netloss - self.mediator_netloss
-        # Update previous income
-        self.prev_mediator_netloss = self.mediator_netloss
-        # Normalize reward
-        self.reward = min(marginal_netloss/60, 1) # TODO: find proper reward scaling
-        if marginal_netloss>50:
-            print(f"Marginal net loss above bounds!!: {marginal_netloss}")
-        return self.reward
-
+    # Decode actions is the first method that is called in a step
+    def decode_action(self, ctx: ph.Context, action):
+        # Translate the action to a price (the highest spot price*2 is the maximum price possible)
+        self.current_local_price = self.prices[action]
 
     def handle_batch(
         self, ctx: ph.Context, batch: Sequence[ph.Message]):
-        """@override
-        We override the method `handle_batch` to consume all the bid messages
-        as one block in order to perform the auction. The batch object contains
-        all the messages that were sent to the actor.
-        Note:
-        -----
-        The default logic is to consume each message individually.
-        """
+
         buy_bids = []
         sell_bids = []
         msgs = []
@@ -366,7 +244,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                 )
             )
             # Update aggregates stats
-            self.total_import += grid_amount
+            self.current_total_import += grid_amount
             self.total_local_bought += local_amount
             self.mediator_netloss += mediator_cost
             self.daily_mediator_payments += mediator_cost
@@ -384,15 +262,167 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                 )
             )
             # Update aggregates stats
-            self.total_export += grid_amount
+            self.current_total_export += grid_amount
             self.mediator_netloss -= mediator_income
             self.daily_mediator_payments -= mediator_income
 
             self.prosumers_netloss -= prosumer_income
             self.daily_local_payments -= prosumer_income
 
-
         return msgs
+    
+    def post_message_resolution(self, ctx: ph.Context) -> None:
+        step = ctx.env_view.current_step 
+        sim_step = (step + 1) // 2
+        hour = ((sim_step-1) % 24) + 1
+
+        # Compute penalty before updating aggregates for next hour
+
+        # DAILY COMPUTES AT END OF DAY
+        ###############################################################
+
+        # Computations at even step for CM to observe at beginning of the next day
+        if hour == 24 and step % 2 == 0:
+            # Compute the final budget for the ending day
+            self.budget_balance = self.daily_grid - self.daily_local
+            # Compute capacity limits for the following day if at end of day
+            self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
+            self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
+
+        # Resets at even step at beginning of day to not interfere with observation
+        # and reward of CM 
+        if hour == 1 and step % 2 == 0:
+            # Reset dailies
+            self.daily_mediator_payments = 0
+            self.daily_prosumers_payments = 0
+            # Reset budget balance
+            self.budget_balance = 0
+
+        # HOURLY COMPUTES AT EVEN STEPS 
+        # i.e. at step 2 these are computed, such that CM agent can observe for its action in step 3.
+        # these computes are updated after all prosumer agents make their updates, such that aggregates match
+        ##################################################################                         
+        if step % 2 == 0:
+            self.penalty = max(self.current_total_import - self.current_cap_limit, 0)*75
+            self.mediator_netloss += self.penalty
+            self.daily_mediator_payments += self.penalty
+            # Resets
+            self.current_total_import = 0
+            self.current_total_export = 0
+            self.total_supply = 0
+            self.total_netloss = 0
+            self.total_interactions = 0
+            # Updates
+            self.current_cap_limit = self.daily_capacity_limits[hour-1]
+            self.current_local_tariff = self.dso.import_tariffs_winter[hour-1]
+
+
+    def encode_observation(self, ctx: ph.Context):
+        step = ctx.env_view.current_step
+        sim_step = (step + 1) // 2
+        hour = ((sim_step-1) % 24) + 1
+
+        # DAILY COMPUTES AT END OF DAY AND AFTER RESET
+        # Computations at even step for CM to observe at beginning of the next day
+        ###############################################################
+        if step == 0 or hour == 24:
+            # Compute the final budget for the ending day
+            # self.budget_balance = self.daily - self.daily_local
+            # Compute capacity limits for the following day
+            self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
+            self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
+
+        # Compute amount of power above current capacity limitation
+        self.capacity_balance = self.current_total_import - self.current_cap_limit
+        # Compute the budget balance - positive for profit, negative for loss
+        self.budget_balance = self.daily_prosumers_payments - self.daily_mediator_payments
+        # Compute import export balance / negative for export, positive for import
+  
+        total_supply = 0
+        total_interactions = 0
+        views = ctx.agent_views.items()
+        for key, view in views:
+            total_supply += view.supply
+            total_interactions += view.interactions
+    
+        marginal_netloss = self.mediator_netloss - self.prev_mediator_netloss
+        marginal_interactions = total_interactions - self.prev_total_interactions
+        prev_price = self.prev_price
+        self.prev_price = self.current_local_price
+        self.prev_total_netloss = self.mediator_netloss
+        self.prev_total_interactions = total_interactions
+
+        # Normalization
+        max_price = self.prices[len(self.prices)-1]
+
+        observation = {
+            "daily_cap_limits": np.divide
+                (
+                    self.daily_capacity_limits, 
+                    25, 
+                    dtype=np.float32
+                ),
+            "infos": np.array(
+                [
+                    prev_price / max_price,
+                    self.current_local_price / max_price,
+                    self.feedin_price / max_price,
+                    self.current_grid_price / max_price,
+                    total_supply / self.all_max_prod,
+                    self.daily_residual_demand / 25,
+                    self.current_total_import / 25,
+                    self.current_cap_limit / 25,
+                    self.budget_balance / self.daily_prosumers_payments+self.daily_mediator_payments,
+                    marginal_netloss / 50,
+                    marginal_interactions / 14,
+                ],
+                dtype=np.float32
+                )
+            }
+
+        clip_obs = np.clip(observation, -1, 1)
+
+        return clip_obs
+    
+
+    def compute_reward(self, ctx: ph.Context) -> float:
+        # Budget balance
+        # 1. Minimize cost
+        # 2. Balance income and cost        
+        # Compute amount of power above current capacity limitation
+        # Compute the budget balance - positive for profit, negative for loss
+        self.budget_balance = self.daily_prosumers_payments - self.daily_mediator_payments
+        self.max_balance = max(self.max_balance, self.budget_balance)
+        print(f"MEDIATOR MAX BUDGET BALANCE: {self.max_balance}")
+        # Compute marginal change in overall netloss
+        marginal_netloss = self.prev_mediator_netloss - self.mediator_netloss
+        # Update previous income
+        self.prev_mediator_netloss = self.mediator_netloss
+        # Normalize reward
+        self.reward = marginal_netloss # TODO: find proper reward scaling
+        self.max_reward = max(self.max_reward, self.reward)
+        print(f"MEDIATOR MAX REWARD: {self.max_reward}")
+        return self.reward
+    
+    
+    def reset(self):
+        super().reset()
+        # Reset statistics
+        self.total_earnings = 0
+        # Reset previous variables (needed for reward computations)
+        self.prev_price = 0
+        self.prev_total_income = 0
+        self.prev_total_netloss = 0
+        self.prev_total_interactions = 0
+        # Get normalization
+        self.all_max_demand = self.dm.get_all_maxdemand()
+        self.all_max_prod = self.dm.get_all_maxprod()*14 # TODO:fix 
+        self.max_price = self.dm.get_all_max_price() + 2.0666
+
+        self.price_array = self.dm.get_price_array()
+        self.current_local_tariff = self.dso.import_tariffs_winter[0]
+        # TODO: Let's see what happens if max price is doubled
+        self.action_prices = np.linspace(0.1, self.max_price*1.5, 20) 
 
 
 ##############################################################

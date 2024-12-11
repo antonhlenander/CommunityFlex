@@ -36,6 +36,9 @@ class DataManager:
     
     def get_all_max_price(self):
         return self.price_df.max()
+    
+    def get_all_min_price(self):
+        return self.price_df.min()
 
     # Old methods from other implementation
 
@@ -81,6 +84,11 @@ class DataManager:
         max = max_df.max().max()
         return max*3
     
+    def get_all_max_daily_demand(self):
+        max_demand = self.demand_df.sum(axis=0)
+        return max_demand.max()
+
+    
     def get_agent_maxproduction(self, aid):
         return self.prod_df[aid].max()
     
@@ -95,9 +103,5 @@ class DataManager:
     def rotate(self):
         print("Rotating demand profiles")
         self.demand_df.columns = [f'H{(int(col[1:]) % 14) + 1}' for col in self.demand_df.columns]
-
-# dm = DataManager()
-# prices = dm.get_price_array()
-
 
 

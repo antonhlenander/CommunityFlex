@@ -174,7 +174,7 @@ if sys.argv[1] == "train":
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        #num_workers=1,
+        num_workers=1,
         results_dir="~/ray_results/community_flex_twolevel",
     )
 
