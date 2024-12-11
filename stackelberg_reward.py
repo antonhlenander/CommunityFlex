@@ -9,7 +9,7 @@ from phantom.telemetry import logger
 from phantom.types import AgentID
 
 
-class StackelbergDelayRewardEnv(PhantomEnv):
+class StackelbergRewardDelayEnv(PhantomEnv):
     """
     An environment modelling a Stackelberg game/competition.
 
@@ -130,6 +130,8 @@ class StackelbergDelayRewardEnv(PhantomEnv):
         # Generate contexts for all agents taking actions / generating messages
         self._make_ctxs(self.agent_ids)
 
+        evenstep = True if self.current_step % 2 == 0 else False
+
         acting_agents, next_acting_agents = (
             (self.leader_agents, self.follower_agents)
             if self.current_step % 2 == 1
@@ -159,8 +161,10 @@ class StackelbergDelayRewardEnv(PhantomEnv):
                     observations[aid] = obs
                     infos[aid] = ctx.agent.collect_infos(ctx)
 
-            if aid in acting_agents:
+            if evenstep:
                 self._rewards[aid] = ctx.agent.compute_reward(ctx)
+            # if aid in acting_agents:
+            #     self._rewards[aid] = ctx.agent.compute_reward(ctx)
 
             terminations[aid] = ctx.agent.is_terminated(ctx)
             truncations[aid] = ctx.agent.is_truncated(ctx)

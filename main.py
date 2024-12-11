@@ -8,6 +8,7 @@ import ray
 from trained_policy import TrainedPolicy
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent, StrategicCommunityMediator
 import stackelberg_custom
+from stackelberg_reward import StackelbergRewardDelayEnv
 from datamanager import DataManager
 from setup import Setup
 from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
@@ -156,7 +157,7 @@ if sys.argv[1] == "train":
 
     ph.utils.rllib.train(
         algorithm="PPO",
-        env_class=ph.StackelbergEnv,
+        env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
             'network': network,
@@ -175,7 +176,7 @@ if sys.argv[1] == "train":
         policies=policies,
         metrics=metrics,
         #num_workers=1,
-        results_dir="~/ray_results/community_flex",
+        results_dir="~/ray_results/community_flex_twolevel",
     )
 
 elif sys.argv[1] == "rollout":
