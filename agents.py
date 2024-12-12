@@ -25,8 +25,9 @@ class DSO():
 
         self.dm: DataManager = dm
         # Updates every step
-        self.current_grid_price: float 
-  
+        self.current_grid_price: float = 0
+
+        self.residual_demand: float = 0
         # Update for every day
         self.daily_prices: list = []
         self.all_daily_demand: list = self.dm.get_all_daily_demand()
@@ -42,23 +43,28 @@ class DSO():
     def compute_residual_demand(self, ctx: ph.Context):
         # Gets the total demand and supply for the next 24 hours
         total_prod = 0
-        for aid, view in ctx.agent_views():
-            base_prod += self.dm.get_agent_daily_prod(aid, ctx.env_view.current_step)
+        views = ctx.agent_views.items()
+        for aid, view in views:
+            base_prod = self.dm.get_agent_daily_prod(aid, ctx.env_view.current_step)
             total_prod += base_prod*view.capacity
         # Compute the residual demand
         residual_demand = self.all_daily_demand - total_prod
-        self.residual_demand = residual_demand
+        self.residual_demand = max(residual_demand, 0)
         return residual_demand
     
     def compute_capacity_limitation(self, var, ctx: ph.Context):
-        step = ctx.env_view.current_step
-        daily_prices = self.price_array[step:step+24]
+        step = ctx.env_view.current_step 
+        sim_step = (step + 1) // 2
+        hour = ((sim_step-1) % 24) + 1
+        daily_prices = self.price_array[sim_step:sim_step+24]
+        # Hack for out of bounds index
+        if len(daily_prices) < 24:
+            daily_prices = self.price_array[0:24]
         max_price = np.max(daily_prices)
         min_price = np.min(daily_prices)
         mid_price = (max_price + min_price)/2
         avg_cap = self.residual_demand/24
         capacity_limitation = avg_cap - var * avg_cap * 2 * (daily_prices - mid_price) / (max_price - min_price)
-        print(capacity_limitation)
         return capacity_limitation
         
         # The production has to be computed from each agent because of the random capacities.
@@ -129,13 +135,17 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # More stats
         self.total_netloss = 0
         self.total_interactions = 0
+        self.total_local_bought = 0
         # Normalization constants
         self.all_max_demand = 0
         self.all_max_prod = 0
 
+        self.all_max_daily_demand = 0
+
         # Finding normalization constants
         self.max_balance = 0
         self.max_reward = 0
+        self.min_reward = 0
 
         # Community net loss
         self.community_net_loss: float = 0
@@ -143,9 +153,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # Community self-sufficiency
         self.community_self_sufficiency: float = 0
 
-        self.prices = np.ndarray(20)
+        self.prices = np.ndarray(30)
 
-        self.action_space = gym.spaces.Discrete(20)
+        self.action_space = gym.spaces.Discrete(30)
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -180,10 +190,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.daily_mediator_payments = 0
             self.daily_prosumers_payments = 0
 
+        # Resetting other stats
+        ###############################################################
+        self.total_local_bought = 0
+
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
         # Translate the action to a price (the highest spot price*2 is the maximum price possible)
         self.current_local_price = self.prices[action]
+        #self.current_local_price = self.prices[29]
 
     def handle_batch(
         self, ctx: ph.Context, batch: Sequence[ph.Message]):
@@ -234,6 +249,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         # DECODING
         msgs = []
+        self.current_total_import = 0
+        self.current_total_export = 0
         # Create messages for the cleared buy bids
         for cleared_buy_bid in cleared_buy_bids:
             buyer_id, buy_amount, local_amount, grid_amount, prosumer_cost, mediator_cost = cleared_buy_bid
@@ -250,7 +267,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.daily_mediator_payments += mediator_cost
 
             self.prosumers_netloss += prosumer_cost
-            self.daily_local_payments += prosumer_cost
+            self.daily_prosumers_payments += prosumer_cost
   
         # Create messages for the cleared sell bids
         for cleared_sell_bid in cleared_sell_bids:
@@ -267,7 +284,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.daily_mediator_payments -= mediator_income
 
             self.prosumers_netloss -= prosumer_income
-            self.daily_local_payments -= prosumer_income
+            self.daily_prosumers_payments -= prosumer_income
 
         return msgs
     
@@ -276,52 +293,37 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         sim_step = (step + 1) // 2
         hour = ((sim_step-1) % 24) + 1
 
-        # Compute penalty before updating aggregates for next hour
-
-        # DAILY COMPUTES AT END OF DAY
-        ###############################################################
-
-        # Computations at even step for CM to observe at beginning of the next day
-        if hour == 24 and step % 2 == 0:
-            # Compute the final budget for the ending day
-            self.budget_balance = self.daily_grid - self.daily_local
-            # Compute capacity limits for the following day if at end of day
-            self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
-            self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
-
-        # Resets at even step at beginning of day to not interfere with observation
-        # and reward of CM 
         if hour == 1 and step % 2 == 0:
             # Reset dailies
             self.daily_mediator_payments = 0
             self.daily_prosumers_payments = 0
             # Reset budget balance
             self.budget_balance = 0
+            # Reset 
+            #self.current_total_import = 0
+            #self.current_total_export = 0
+            #self.total_supply = 0
+            self.total_netloss = 0
+            self.total_interactions = 0
 
         # HOURLY COMPUTES AT EVEN STEPS 
         # i.e. at step 2 these are computed, such that CM agent can observe for its action in step 3.
         # these computes are updated after all prosumer agents make their updates, such that aggregates match
-        ##################################################################                         
+        ##################################################################             
+                    
         if step % 2 == 0:
             self.penalty = max(self.current_total_import - self.current_cap_limit, 0)*75
             self.mediator_netloss += self.penalty
             self.daily_mediator_payments += self.penalty
-            # Resets
-            self.current_total_import = 0
-            self.current_total_export = 0
-            self.total_supply = 0
-            self.total_netloss = 0
-            self.total_interactions = 0
-            # Updates
-            self.current_cap_limit = self.daily_capacity_limits[hour-1]
-            self.current_local_tariff = self.dso.import_tariffs_winter[hour-1]
 
 
     def encode_observation(self, ctx: ph.Context):
         step = ctx.env_view.current_step
         sim_step = (step + 1) // 2
         hour = ((sim_step-1) % 24) + 1
+        hr_idx = sim_step % 24
 
+        print(f"------------------ STEP {ctx.env_view.current_step} OBSERVATION ------------------")
         # DAILY COMPUTES AT END OF DAY AND AFTER RESET
         # Computations at even step for CM to observe at beginning of the next day
         ###############################################################
@@ -332,12 +334,29 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.daily_residual_demand = self.dso.compute_residual_demand(ctx)
             self.daily_capacity_limits = self.dso.compute_capacity_limitation(self.type.cap_var, ctx)
 
+            print(f"DAILY RESIDUAL DEMAND: {self.daily_residual_demand}")
+            print(f"DAILY CAPACITY LIMITS: {self.daily_capacity_limits}")
+            print(f"SUM OF CAP LIMITS: {np.sum(self.daily_capacity_limits)}")
+
+        if step % 2 == 0:
+            self.current_cap_limit = self.daily_capacity_limits[hr_idx]
+            self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
+            self.feedin_price = self.price_array[sim_step] - self.dso.export_tariff
+            self.current_local_tariff = self.dso.import_tariffs_winter[hr_idx]*(1-self.type.discount)
+
+        
+        print(f"CURRENT LOCAL PRICE: {self.current_local_price}")
+        print(f"CURRENT GRID PRICE: {self.current_grid_price}")
+        print(f"CURRENT FEEDIN PRICE: {self.feedin_price}")
+        print(f"CURRENT LOCAL TARIFF: {self.current_local_tariff}")
+        print(f"STEP CURRENT TOTAL IMPORT: {self.current_total_import}")
+        print(f"STEP CURRENT CAP LIMIT: {self.current_cap_limit}")
+
         # Compute amount of power above current capacity limitation
         self.capacity_balance = self.current_total_import - self.current_cap_limit
         # Compute the budget balance - positive for profit, negative for loss
         self.budget_balance = self.daily_prosumers_payments - self.daily_mediator_payments
-        # Compute import export balance / negative for export, positive for import
-  
+        
         total_supply = 0
         total_interactions = 0
         views = ctx.agent_views.items()
@@ -354,12 +373,13 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         # Normalization
         max_price = self.prices[len(self.prices)-1]
+        epsilon = 0.000001
 
         observation = {
             "daily_cap_limits": np.divide
                 (
                     self.daily_capacity_limits, 
-                    25, 
+                    self.all_max_daily_demand, 
                     dtype=np.float32
                 ),
             "infos": np.array(
@@ -369,20 +389,21 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                     self.feedin_price / max_price,
                     self.current_grid_price / max_price,
                     total_supply / self.all_max_prod,
-                    self.daily_residual_demand / 25,
-                    self.current_total_import / 25,
-                    self.current_cap_limit / 25,
-                    self.budget_balance / self.daily_prosumers_payments+self.daily_mediator_payments,
-                    marginal_netloss / 50,
+                    self.daily_residual_demand / self.all_max_daily_demand,
+                    self.current_total_import / self.all_max_daily_demand,
+                    self.current_cap_limit / self.all_max_daily_demand,
+                    self.budget_balance / (self.daily_prosumers_payments + self.daily_mediator_payments + epsilon),
+                    marginal_netloss / 3000,
                     marginal_interactions / 14,
                 ],
                 dtype=np.float32
                 )
             }
 
-        clip_obs = np.clip(observation, -1, 1)
+        for key, value in observation.items():
+            observation[key] = np.clip(value, -1, 1)
 
-        return clip_obs
+        return observation
     
 
     def compute_reward(self, ctx: ph.Context) -> float:
@@ -391,17 +412,35 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # 2. Balance income and cost        
         # Compute amount of power above current capacity limitation
         # Compute the budget balance - positive for profit, negative for loss
-        self.budget_balance = self.daily_prosumers_payments - self.daily_mediator_payments
-        self.max_balance = max(self.max_balance, self.budget_balance)
-        print(f"MEDIATOR MAX BUDGET BALANCE: {self.max_balance}")
+        step = ctx.env_view.current_step
+        sim_step = (step + 1) // 2
+        hour = ((sim_step-1) % 24) + 1
+        budget_signal = 0
+        if hour == 24:
+            self.budget_balance = self.daily_prosumers_payments - self.daily_mediator_payments
+            #print(f"BUDGET BALANCE: {self.budget_balance}")
+            if 100 > self.budget_balance > -100:
+                budget_signal = 1
+            else:
+                budget_signal = -1
+        
+        #print(f"MEDIATOR BUDGET BALANCE: {self.budget_balance}")
         # Compute marginal change in overall netloss
         marginal_netloss = self.prev_mediator_netloss - self.mediator_netloss
+        normed_marginal_netloss = marginal_netloss / 3000
+        self.max_reward = max(marginal_netloss, self.max_reward)
+        self.min_reward = min(marginal_netloss, self.min_reward)
+        #print(f"MAX MARGINAL NET LOSS: {self.max_reward}")
+        #print(f"MIN MARGINAL NET LOSS: {self.min_reward}")
         # Update previous income
         self.prev_mediator_netloss = self.mediator_netloss
-        # Normalize reward
-        self.reward = marginal_netloss # TODO: find proper reward scaling
-        self.max_reward = max(self.max_reward, self.reward)
-        print(f"MEDIATOR MAX REWARD: {self.max_reward}")
+        # Combine weighted reward signals
+        self.reward = 0.5*budget_signal + normed_marginal_netloss
+        #print(f"REWARD: {self.reward}")
+        #time.sleep(0.5)
+        # Clip reward
+        #self.reward = max(min(self.reward, 1), -1)
+        #time.sleep(0.1)
         return self.reward
     
     
@@ -419,10 +458,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.all_max_prod = self.dm.get_all_maxprod()*14 # TODO:fix 
         self.max_price = self.dm.get_all_max_price() + 2.0666
 
+        self.all_max_daily_demand = self.dm.get_all_max_daily_demand()
+
         self.price_array = self.dm.get_price_array()
+        self.current_grid_price = self.price_array[0] + self.dso.import_tariffs_winter[0]
+        self.feedin_price = self.price_array[0] - self.dso.export_tariff
         self.current_local_tariff = self.dso.import_tariffs_winter[0]
         # TODO: Let's see what happens if max price is doubled
-        self.action_prices = np.linspace(0.1, self.max_price*1.5, 20) 
+        max_price = self.max_price * 2
+        self.prices = np.linspace(0.1, max_price, num=30) 
 
 
 ##############################################################
@@ -504,7 +548,7 @@ class SimpleCommunityMediator(ph.Agent):#
             msgs = self.market_clearing(buy_bids=buy_bids, sell_bids=sell_bids)
 
         return msgs
-
+    
     def market_clearing(
         self, buy_bids: Sequence[ph.Message[BuyBid]], sell_bids: Sequence[ph.Message[SellBid]]):   
 
@@ -526,30 +570,49 @@ class SimpleCommunityMediator(ph.Agent):#
             sell_bids=encoded_sell_bids,
             local_price=self.current_local_price,
             grid_price=self.current_grid_price,
-            feedin_price=self.current_feedin_price,
+            feedin_price=self.feedin_price,
             local_tariff=self.current_local_tariff
             )
 
         # DECODING
         msgs = []
+        self.current_total_import = 0
+        self.current_total_export = 0
         # Create messages for the cleared buy bids
         for cleared_buy_bid in cleared_buy_bids:
-            buyer_id, buy_amount, local_amount, local_cost, grid_cost = cleared_buy_bid
+            buyer_id, buy_amount, local_amount, grid_amount, prosumer_cost, mediator_cost = cleared_buy_bid
             msgs.append(
                 (
                     buyer_id,
-                    ClearedBuyBid(buyer_id, buy_amount, round(local_amount, 2), round(local_cost, 2), round(grid_cost, 2)),
+                    ClearedBuyBid(buyer_id, buy_amount, round(local_amount, 2), round(grid_amount, 2), round(prosumer_cost, 2), round(mediator_cost, 2)),
                 )
             )
+            # Update aggregates stats
+            self.current_total_import += grid_amount
+            self.total_local_bought += local_amount
+            self.mediator_netloss += mediator_cost
+            self.daily_mediator_payments += mediator_cost
+
+            self.prosumers_netloss += prosumer_cost
+            self.daily_prosumers_payments += prosumer_cost
+  
         # Create messages for the cleared sell bids
         for cleared_sell_bid in cleared_sell_bids:
-            seller_id, sell_amount, local_income, grid_income = cleared_sell_bid
+            seller_id, sell_amount, local_amount, grid_amount, prosumer_income, mediator_income = cleared_sell_bid
             msgs.append(
                 (
                     seller_id,
-                    ClearedSellBid(seller_id, sell_amount, round(local_income, 2), round(grid_income, 2)),
+                    ClearedSellBid(seller_id, sell_amount, round(local_amount, 2), round(grid_amount, 2), round(prosumer_income, 2), round(mediator_income, 2)),
                 )
             )
+            # Update aggregates stats
+            self.current_total_export += grid_amount
+            self.mediator_netloss -= mediator_income
+            self.daily_mediator_payments -= mediator_income
+
+            self.prosumers_netloss -= prosumer_income
+            self.daily_prosumers_payments -= prosumer_income
+
         return msgs
 
 ##############################################################
@@ -638,7 +701,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 # Can include type here as well in the future maybe
                 "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float32),
 
-                "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(13,), dtype=np.float32),
+                "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
             }
         )
 
@@ -689,10 +752,13 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def pre_message_resolution(self, ctx: ph.Context) -> None:
         self.self_consumption = 0.0
         self.current_local_bought = 0.0
+        # Reset stats
+     
         # if ctx.env_view.current_step == 1:
         #     self.episode += 1
 
     def decode_action(self, ctx: ph.Context, action: np.ndarray):
+        print(f"AGENT {self.id} CURRENT SUPPLY: {self.current_supply} ACTION: {action}")
         #print(action)
         if action == 0:
            # Buy enough power to cover own deficit
@@ -761,12 +827,12 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         if energy_to_charge > 0:
             self.charge_battery(energy_to_charge)
         # Update current import
-        self.current_import = (msg.payload.buy_amount - msg.payload.local_amount)
         # Update accumulated statistics
+        self.current_import = msg.payload.grid_amount
+        print(f"AGENT {self.id} CURRENT IMPORT: {self.current_import}")
         self.current_local_bought += msg.payload.local_amount
-        self.acc_local_market_cost += msg.payload.local_cost
-        self.acc_grid_market_cost += msg.payload.grid_cost
-        if self.current_import > 0:
+        self.acc_local_market_cost += msg.payload.prosumer_cost
+        if msg.payload.local_amount > 0:
             self.acc_grid_interactions += 1
 
 
@@ -774,11 +840,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def handle_cleared_sellbid(self, _ctx: ph.Context, msg: ph.Message):
         # Calculate the energy to discharge
         # Update statistics
-        self.acc_local_market_coin += msg.payload.local_coin
-        self.acc_feedin_coin += msg.payload.feedin_coin
-        if msg.payload.feedin_coin > 0:
-            # Update current export
-            self.current_export = (msg.payload.sell_amount - msg.payload.local_amount)
+        self.acc_local_market_coin += msg.payload.prosumer_income
+        if msg.payload.local_amount > 0:
             # Update accumulated statistics
             self.acc_grid_interactions += 1
 
@@ -818,10 +881,6 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         else:
             self.self_consumption += self.current_load
 
-        print(f"Agent {self.id} supply: {self.current_supply}")
-        print(f"Agent {self.id} net loss: {self.net_loss}")
-        print(f"Agent {self.id} interactions: {self.acc_grid_interactions}")
-
 
     def encode_observation(self, ctx: ph.Context):        
         # Action masking
@@ -859,18 +918,14 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
         observation = {
             'observations' : np.array([
-                    ctx[self.mediator_id].current_grid_price / self.max_price, 
                     ctx[self.mediator_id].current_local_price / self.max_price, 
-                    ctx[self.mediator_id].current_feedin_price / self.max_price,
                     self.current_load / self.all_max_load,
                     self.current_prod / self.all_max_prod,
                     self.current_charge / self.all_max_cap,
                     self.battery_cap / self.all_max_cap,
                     self.charge_rate / self.all_max_cap,
                     self.acc_local_market_coin / 6000,
-                    self.acc_feedin_coin / 6000,
                     self.acc_local_market_cost / 6000,
-                    self.acc_grid_market_cost / 6000,
                     self.acc_grid_interactions / 8760], dtype=np.float32),
             'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float32)
         }
@@ -889,15 +944,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         marginal_utility = utility - self.utility_prev 
         # Update utility
         self.utility_prev = utility
-        # print(f"-------------------STEP {ctx.env_view.current_step}-------------------")
-        # if self.utility_prev > 20:
-        #     print(f"Utility above bounds!!: {self.utility_prev}")
-        # if self.utility_prev < -20:
-        #     print(f"Utility below bounds!!: {self.utility_prev}")
-        # self.max_utility = max(self.max_utility, self.utility_prev)
-        # print("MAX UTILITY ACHIEVED: ", self.max_utility)
-        # # Normalize reward
-        # time.sleep(0.1)
+        if marginal_utility > 100 or marginal_utility < -100:
+            print("!!!!!!!!!!!!!!!MARGINAL UTILITY: ", marginal_utility)
         self.reward = min(marginal_utility/100, 1)
         return self.reward
 
@@ -947,6 +995,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.all_max_prod = self.dm.get_all_maxprod()
         self.all_max_cap = 15
         self.max_price = self.dm.get_all_max_price() + 2.0666
+        self.max_price = self.max_price * 2
 
             
 
@@ -1095,8 +1144,7 @@ class SimpleProsumerAgent(ph.Agent):
             self.charge_battery(energy_to_charge)
         # Update statistics
         self.current_local_bought += msg.payload.local_amount
-        self.acc_local_market_cost += msg.payload.local_cost
-        self.acc_grid_market_cost += msg.payload.grid_cost
+        self.acc_local_market_cost += msg.payload.prosumer_cost
         self.acc_grid_interactions += 1
 
 
@@ -1107,8 +1155,7 @@ class SimpleProsumerAgent(ph.Agent):
         if energy_to_discharge > 0:
             self.discharge_battery(energy_to_discharge)
         # Update statistics
-        self.acc_local_market_coin += msg.payload.local_coin
-        self.acc_feedin_coin += msg.payload.feedin_coin
+        self.acc_local_market_coin += msg.payload.prosumer_cost
         self.acc_grid_interactions += 1
 
     def post_message_resolution(self, ctx: ph.Context):

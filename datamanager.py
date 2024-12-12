@@ -22,7 +22,7 @@ class DataManager:
         return demand_profile
     
     def get_agent_daily_prod(self, aid, step):
-        prod_profile = self.prod_df[aid].iloc[step:step+24].values
+        prod_profile = self.prod_df[aid].iloc[step:step+24].sum()
         return prod_profile
     
     def get_all_daily_demand(self):
@@ -85,8 +85,8 @@ class DataManager:
         return max*3
     
     def get_all_max_daily_demand(self):
-        max_demand = self.demand_df.sum(axis=0)
-        return max_demand.max()
+        max_demand = self.demand_df.sum(axis=0).sum()
+        return max_demand
 
     
     def get_agent_maxproduction(self, aid):
@@ -105,3 +105,5 @@ class DataManager:
         self.demand_df.columns = [f'H{(int(col[1:]) % 14) + 1}' for col in self.demand_df.columns]
 
 
+dm = DataManager()
+print(dm.get_all_max_daily_demand())

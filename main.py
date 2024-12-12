@@ -164,12 +164,12 @@ if sys.argv[1] == "train":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        # rllib_config={
-        #     "model": {"custom_model": "torch_action_mask_model"},
-        #     "lr": 0.00001,
-        #     "entropy_coeff": 0.002,
-        #     "lambda": 0.95,
-        # },
+        rllib_config={
+            #"model": {"custom_model": "torch_action_mask_model"},
+            "lr": 0.00001,
+            "entropy_coeff": 0.002,
+            "lambda": 0.95,
+        },
         iterations=200,
         checkpoint_freq=1,
         policies=policies,

@@ -5,6 +5,7 @@ import cloudpickle
 import os
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent, StrategicCommunityMediator
 import stackelberg_custom
+from stackelberg_reward import StackelbergRewardDelayEnv
 from datamanager import DataManager
 from setup import Setup
 from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
@@ -25,12 +26,12 @@ no_agents = 14
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/eval/demandprofiles.csv', cap_path='data/eval/caps.csv')
-mediator = SimpleCommunityMediator('CM', dm=dm,)
+mediator = StrategicCommunityMediator('CM', dm=dm,)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
 # Define Network and create connections between Actors
-agents = [mediator] + prosumer_agents
+agents = prosumer_agents + [mediator]
 network = ph.Network(agents)
 
 # Connect the agents to the mediator
@@ -46,6 +47,9 @@ follower_agents = [agent.id for agent in prosumer_agents]
 metrics = {}
 
 metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
+metrics["cm/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
+metrics["cm/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
+metrics["cm/capacity_balance"] = ph.metrics.SimpleAgentMetric("CM", "capacity_balance")
 metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
 metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
 metrics["env/total_charge"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_charge", group_reduce_action="sum")
@@ -59,6 +63,7 @@ metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local
 metrics["env/min_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="min")
 metrics["env/max_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="max")
 
+
 for aid in (follower_agents):
     metrics[f"{aid}/current_load"] = ph.metrics.SimpleAgentMetric(aid, "current_load")
     metrics[f"{aid}/current_prod"] = ph.metrics.SimpleAgentMetric(aid, "current_prod")
@@ -69,7 +74,7 @@ for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
     metrics[f"{aid}/acc_local_market_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_local_market_coin")
     metrics[f"{aid}/acc_feedin_coin"] = ph.metrics.SimpleAgentMetric(aid, "acc_feedin_coin")
-    #metrics[f"{aid}/utility_prev"] = ph.metrics.SimpleAgentMetric(aid, "utility_prev")
+
     #metrics[f"{aid}/reward"] = ph.metrics.SimpleAgentMetric(aid, "reward")
     #metrics[f"{aid}/type.capacity"] = ph.metrics.SimpleAgentMetric(aid, "type.capacity")
     
@@ -160,7 +165,7 @@ elif sys.argv[1] == "rollout":
         )
 
     if setup_type == 'multi':
-        directory = "~/ray_results/community_flex/LATEST/"
+        directory = "~/ray_results/community_flex_twolevel/LATEST/"
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
@@ -173,7 +178,8 @@ elif sys.argv[1] == "rollout":
         )
         agent_supertypes.update(
             {
-                "CM": SimpleCommunityMediator.Supertype(
+                "CM": StrategicCommunityMediator.Supertype(
+                    cap_var=0.5,
                     discount=0.5
                 )    
             }
@@ -182,7 +188,7 @@ elif sys.argv[1] == "rollout":
 
     results = ph.utils.rllib.rollout(
         directory=directory,
-        env_class=ph.StackelbergEnv,
+        env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
             'network': network,
@@ -197,7 +203,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/flex"
+    path = f"output/flex_twolevel/"
     if not os.path.exists(path):
         os.makedirs(path)
 
