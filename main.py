@@ -32,7 +32,7 @@ discount = 0.5 # possibly supertype?
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
-mediator = StrategicCommunityMediator('CM', dm=dm)
+mediator = SimpleCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -139,7 +139,7 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity=UniformIntSampler(0, 4),
+                    capacity=UniformIntSampler(1, 4),
                     eta=UniformFloatSampler(eta, eta)
                 )    
                 for i in range(1, 15)
@@ -148,7 +148,7 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 "CM": SimpleCommunityMediator.Supertype(
-                    discount=UniformFloatSampler(0.1, 1)
+                    discount=UniformFloatSampler(0.5, 0.5)
                 )    
             }
         )
@@ -165,7 +165,7 @@ if sys.argv[1] == "train":
             'agent_supertypes': agent_supertypes,
         },
         rllib_config={
-            #"model": {"custom_model": "torch_action_mask_model"},
+            "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.00001,
             "entropy_coeff": 0.002,
             "lambda": 0.95,
@@ -174,8 +174,8 @@ if sys.argv[1] == "train":
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=1,
-        results_dir="~/ray_results/community_flex_twolevel",
+        #num_workers=1,
+        results_dir="~/ray_results/community_flex_singlepolicy",
     )
 
 elif sys.argv[1] == "rollout":

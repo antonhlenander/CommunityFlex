@@ -502,6 +502,16 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_local_price: float 
         self.current_feedin_price: float
 
+        self.total_local_bought: float = 0
+        self.current_total_export: float = 0
+        self.current_total_import: float = 0
+
+        self.mediator_netloss = 0
+        self.daily_mediator_payments = 0
+
+        self.prosumers_netloss = 0
+        self.daily_prosumers_payments = 0
+
     def view(self, neighbour_id=None) -> ph.View:
         return self.MediatorView(
             current_grid_price = self.current_grid_price,
@@ -517,7 +527,7 @@ class SimpleCommunityMediator(ph.Agent):#
             sim_step = (ctx.env_view.current_step + 1) // 2
             # TODO: The StrategicAgent gets from sim_step-1 and hour-1, they should match
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
-            self.current_local_price = self.price_array[sim_step] + (self.import_tariffs[sim_step%24] * (1-self.type.discount))
+            self.current_local_price = self.current_grid_price * 2
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
             #print(f"Simple mediator updated prices: {self.current_grid_price}, {self.current_local_price}, {self.current_feedin_price}")
 
@@ -526,7 +536,7 @@ class SimpleCommunityMediator(ph.Agent):#
         super().reset()
         self.price_array = self.dm.get_price_array()
         self.current_grid_price = self.price_array[0] + self.import_tariffs[0]
-        self.current_local_price = self.price_array[0] + (self.import_tariffs[0] * (1-self.type.discount))
+        self.current_local_price = self.current_grid_price * 2
         self.current_feedin_price = self.price_array[0] - self.export_tariff
         
 
@@ -570,8 +580,8 @@ class SimpleCommunityMediator(ph.Agent):#
             sell_bids=encoded_sell_bids,
             local_price=self.current_local_price,
             grid_price=self.current_grid_price,
-            feedin_price=self.feedin_price,
-            local_tariff=self.current_local_tariff
+            feedin_price=0,
+            local_tariff=0
             )
 
         # DECODING
@@ -701,7 +711,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 # Can include type here as well in the future maybe
                 "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float32),
 
-                "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
+                "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(9,), dtype=np.float32),
             }
         )
 
@@ -723,15 +733,11 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         if amount > 0:
             buy_amount = round(amount, 2)
             return [(self.mediator_id, BuyBid(self.id, buy_amount))]
-        else:
-            print("NEGATIVE BUY AMOUNT")
 
 
     def sell_power(self, amount):
         if amount > 0:
             return [(self.mediator_id, SellBid(self.id, round(amount, 2)))]
-        else:
-            print("NEGATIVE SELL AMOUNT")
     
     # Charge or decharge battery by a certain amount
     def charge_battery(self, amount):
@@ -758,7 +764,6 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         #     self.episode += 1
 
     def decode_action(self, ctx: ph.Context, action: np.ndarray):
-        print(f"AGENT {self.id} CURRENT SUPPLY: {self.current_supply} ACTION: {action}")
         #print(action)
         if action == 0:
            # Buy enough power to cover own deficit
@@ -774,7 +779,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 self.acc_invalid_actions += 1
             else:
                 deficit = abs(min(self.current_supply, 0))
-                buy_amount = self.max_batt_charge + deficit
+                # Capping the buy amount to 1 kWh
+                buy_amount = min(1, self.max_batt_charge) + deficit
                 return self.buy_power(buy_amount)
 
         elif action == 2: 
@@ -829,7 +835,6 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Update current import
         # Update accumulated statistics
         self.current_import = msg.payload.grid_amount
-        print(f"AGENT {self.id} CURRENT IMPORT: {self.current_import}")
         self.current_local_bought += msg.payload.local_amount
         self.acc_local_market_cost += msg.payload.prosumer_cost
         if msg.payload.local_amount > 0:
@@ -918,14 +923,14 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
         observation = {
             'observations' : np.array([
-                    ctx[self.mediator_id].current_local_price / self.max_price, 
+                    ctx[self.mediator_id].current_local_price / self.max_price,
                     self.current_load / self.all_max_load,
                     self.current_prod / self.all_max_prod,
                     self.current_charge / self.all_max_cap,
                     self.battery_cap / self.all_max_cap,
                     self.charge_rate / self.all_max_cap,
-                    self.acc_local_market_coin / 6000,
-                    self.acc_local_market_cost / 6000,
+                    self.acc_local_market_coin / 30000,
+                    self.acc_local_market_cost / 30000,
                     self.acc_grid_interactions / 8760], dtype=np.float32),
             'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float32)
         }
