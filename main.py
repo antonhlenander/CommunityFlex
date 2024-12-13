@@ -148,7 +148,8 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 "CM": SimpleCommunityMediator.Supertype(
-                    discount=UniformFloatSampler(0.5, 0.5)
+                    discount=UniformFloatSampler(0.5, 0.5),
+                    std_dev=UniformFloatSampler(0.01, 0.15)
                 )    
             }
         )

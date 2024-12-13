@@ -479,6 +479,7 @@ class SimpleCommunityMediator(ph.Agent):#
     @dataclass
     class Supertype(ph.Supertype):
         discount: float = 0.5
+        std_dev: float = 0
 
     @dataclass(frozen=True)
     class MediatorView(ph.AgentView):
@@ -506,6 +507,8 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_total_export: float = 0
         self.current_total_import: float = 0
 
+        self.max_price: float = 0
+
         self.mediator_netloss = 0
         self.daily_mediator_payments = 0
 
@@ -527,7 +530,9 @@ class SimpleCommunityMediator(ph.Agent):#
             sim_step = (ctx.env_view.current_step + 1) // 2
             # TODO: The StrategicAgent gets from sim_step-1 and hour-1, they should match
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
-            self.current_local_price = self.current_grid_price * 2
+            price = self.current_grid_price * 2 
+            noise = np.random.normal(1, self.type.std_dev)
+            self.current_local_price = min(price*noise, self.max_price)
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
             #print(f"Simple mediator updated prices: {self.current_grid_price}, {self.current_local_price}, {self.current_feedin_price}")
 
@@ -538,6 +543,8 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_grid_price = self.price_array[0] + self.import_tariffs[0]
         self.current_local_price = self.current_grid_price * 2
         self.current_feedin_price = self.price_array[0] - self.export_tariff
+        self.max_price = self.dm.get_all_max_price() + 2.0666
+        self.max_price = self.max_price * 2
         
 
     def handle_batch(
@@ -624,6 +631,7 @@ class SimpleCommunityMediator(ph.Agent):#
             self.daily_prosumers_payments -= prosumer_income
 
         return msgs
+
 
 ##############################################################
 # Strategic RL prosumer agent
