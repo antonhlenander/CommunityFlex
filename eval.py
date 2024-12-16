@@ -165,6 +165,27 @@ elif sys.argv[1] == "rollout":
         )
 
     if setup_type == 'multi':
+        directory = "~/ray_results/community_flex_singlepolicy/LATEST/"
+        agent_supertypes.update(
+            {
+                f"H{i}": StrategicProsumerAgent.Supertype(
+                    #capacity=2,
+                    eta=eta,
+                    rollout=1
+                )    
+                for i in range(1, 15)
+            }
+        )
+        agent_supertypes.update(
+            {
+                "CM": StrategicCommunityMediator.Supertype(
+                    cap_var=0.5,
+                    discount=0.5
+                )    
+            }
+        )
+
+    if setup_type == 'multsing':
         directory = "~/ray_results/community_flex_twolevel/LATEST/"
         agent_supertypes.update(
             {
@@ -203,7 +224,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/flex_twolevel/"
+    path = f"output/flex_test_fixedprices/"
     if not os.path.exists(path):
         os.makedirs(path)
 

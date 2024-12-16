@@ -53,6 +53,17 @@ class ClearedSellBid:
     grid_amount: float
     prosumer_income: float # Local price 
     mediator_income: float # Spot price - export tariff
+
+@ph.msg_payload()
+class PriceUpdate:
+    """
+    Update the price of electricity.
+
+    Attributes:
+    -----------
+    new_price (float):  new price of electricity
+    """
+    current_price: float
    
 @ph.msg_payload()
 class DummyMsg:

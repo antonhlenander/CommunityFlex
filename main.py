@@ -58,6 +58,8 @@ metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, 
 metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agents, "self_consumption", group_reduce_action="sum")
 metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
 metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
+# metrics["CM/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
+# metrics["CM/penalized_amount"] = ph.metrics.SimpleAgentMetric("CM", "penalized_amount")
 
 for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
@@ -107,7 +109,7 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"CM": StrategicCommunityMediator.Supertype(
-                    discount=0.5,
+                    discount=0.8,
                     cap_var=0.5
                 )    
             }
@@ -149,7 +151,8 @@ if sys.argv[1] == "train":
             {
                 "CM": SimpleCommunityMediator.Supertype(
                     discount=UniformFloatSampler(0.5, 0.5),
-                    std_dev=UniformFloatSampler(0.01, 0.15)
+                    std_dev=UniformFloatSampler(0.01, 0.15),
+                    #std_dev=UniformFloatSampler(0.0, 0.0)
                 )    
             }
         )
@@ -166,17 +169,18 @@ if sys.argv[1] == "train":
             'agent_supertypes': agent_supertypes,
         },
         rllib_config={
-            "model": {"custom_model": "torch_action_mask_model"},
+            #"model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.00001,
             "entropy_coeff": 0.002,
             "lambda": 0.95,
+            "gamma": 0.99,
         },
         iterations=200,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        #num_workers=1,
-        results_dir="~/ray_results/community_flex_singlepolicy",
+        num_workers=1,
+        results_dir="~/ray_results/community_flex_twolevel",
     )
 
 elif sys.argv[1] == "rollout":

@@ -143,6 +143,9 @@ class StackelbergRewardDelayEnv(PhantomEnv):
 
         self.resolve_network()
 
+        # new line, make contexts again after post message resolutions
+        self._make_ctxs(self.agent_ids)
+
         observations: Dict[AgentID, Any] = {}
         rewards: Dict[AgentID, float] = {}
         terminations: Dict[AgentID, bool] = {}

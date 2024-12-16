@@ -106,4 +106,5 @@ class DataManager:
 
 
 dm = DataManager()
-print(dm.get_all_max_daily_demand())
+prices = dm.get_price_array()
+print(len(prices))
