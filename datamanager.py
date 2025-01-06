@@ -106,5 +106,7 @@ class DataManager:
 
 
 dm = DataManager()
-prices = dm.get_price_array()
-print(len(prices))
+prod = dm.get_all_maxprod()
+demand = dm.get_all_maxdemand()
+print(prod)
+print(demand)

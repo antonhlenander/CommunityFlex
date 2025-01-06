@@ -23,7 +23,7 @@ import gymnasium as gym
 class TrainedPolicy(phantom.Policy):
     def __init__(self, observation_space, action_space, **kwargs):
         self.policy = ray.rllib.policy.Policy.from_checkpoint(
-            "/Users/antonlenander/ray_results/community_flex_singlepolicy/PPO_StackelbergRewardDelayEnv_2024-12-13_12-19-53zu_glnhq/checkpoint_000069/policies/prosumer_policy"
+            "/Users/antonlenander/ray_results/community_flex_singlepolicy/PPO_StackelbergRewardDelayEnv_2024-12-17_10-29-59a6rem3ul/checkpoint_000060/policies/prosumer_policy"
             )
         super().__init__(self.policy.model.obs_space, self.policy.model.action_space, **kwargs)
 

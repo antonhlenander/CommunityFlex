@@ -158,6 +158,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.max_reward = 0
         self.min_reward = 0
 
+        # Training stats
+        self.different_prices = []
+        self.no_different_prices = 0 
+
         # Community net loss
         self.community_net_loss: float = 0
 
@@ -165,6 +169,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.community_self_sufficiency: float = 0
 
         self.prices = np.ndarray(30)
+
+        self.choices = np.linspace(0.1, 16, num=10)
 
         self.action_space = gym.spaces.Discrete(30)
 
@@ -182,8 +188,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     def observation_space(self):
         return gym.spaces.Dict(
             {
-                "next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
-                "infos": gym.spaces.Box(low=-1.0, high=1.0, shape=(12,), dtype=np.float32),
+                #"next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
+                "infos": gym.spaces.Box(low=-1.0, high=1.0, shape=(16,), dtype=np.float32),
             }
         )
 
@@ -201,14 +207,16 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
-        # Translate the action to a price (the highest spot price*2 is the maximum price possible)
-        self.current_local_price = round(self.prices[action], 2)
-        # if ctx.env_view.current_step % 12 == 1:
-        #     self.current_local_price = round(self.prices[0], 2)
-        # else:
-        #     self.current_local_price = round(self.prices[29], 2)
-        #print(f"----------- Step {ctx.env_view.current_step} decode action -------------")
-        #print(f"Current local price is: {self.current_local_price} ")
+
+        
+        choice = int(input("Enter a choice between 0 and 9: "))
+        
+        self.current_local_price = round(self.prices[self.choices[choice]], 2)
+
+        if self.current_local_price not in self.different_prices:
+            self.different_prices.append(self.current_local_price)
+
+        self.no_different_prices = len(self.different_prices)
 
         msgs = []
         for agent in ctx.neighbour_ids:
@@ -286,7 +294,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
             self.prosumers_netloss += prosumer_cost
             self.alltime_prosumers_payments += prosumer_cost
-  
+
         # Create messages for the cleared sell bids
         for cleared_sell_bid in cleared_sell_bids:
             seller_id, sell_amount, local_amount, grid_amount, prosumer_income, mediator_income = cleared_sell_bid
@@ -303,6 +311,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
             self.prosumers_netloss -= prosumer_income
             self.alltime_prosumers_payments -= prosumer_income
+
+
 
         return msgs
     
@@ -331,7 +341,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                     
         if step % 2 == 0:
             self.penalized_amount = max(self.current_total_import - self.current_cap_limit, 0)
-            self.penalty = self.penalized_amount*15
+            self.penalty = self.penalized_amount*0
             self.capacity_balance = self.current_total_import - self.current_cap_limit
             self.mediator_netloss += self.penalty
             self.alltime_mediator_payments += self.penalty
@@ -341,6 +351,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         sim_step = (step + 1) // 2
         hour = ((sim_step-1) % 24) + 1
         hr_idx = sim_step % 24
+        day = (sim_step // 24)
+        month = day // 30
 
         #print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR OBSERVATION ------------------")
         # DAILY COMPUTES AT END OF DAY AND AFTER RESET
@@ -348,6 +360,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         ###############################################################
         if step == 0:
             self.yearly_cap_limits = self.dso.compute_yearly_capacity_limits(self.type.cap_var, ctx)
+            # Extends yearly_cap_limits such that we dont get out of bounds error
             self.yearly_cap_limits.extend([10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10])
             views = ctx.agent_views.items()
             # for key, view in views:
@@ -374,10 +387,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         # Compute the budget balance - positive for profit, negative for loss
         self.budget_balance = self.alltime_prosumers_payments - self.alltime_mediator_payments
+        normed_budget_balance = self.budget_balance / (self.alltime_mediator_payments+self.alltime_prosumers_payments+0.000001)
         
         views = ctx.agent_views.items()
         for key, view in views:
-            self.current_total_supply += view.supply
+            self.current_total_prod += view.current_prod
+            self.current_total_load += view.current_load
             self.acc_total_interactions += view.interactions
 
         marginal_netloss = self.mediator_netloss - self.prev_mediator_netloss
@@ -407,30 +422,36 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # print(f"Marginal net loss: {marginal_netloss}")
 
         observation = {
-            "next_cap_limits": np.divide
-                (
-                    next_cap_limits,
-                    self.all_max_daily_demand, 
-                    dtype=np.float32
-                ),
+            # "next_cap_limits": np.divide
+            #     (
+            #         next_cap_limits,
+            #         self.all_max_daily_demand, 
+            #         dtype=np.float32
+            #     ),
             "infos": np.array(
                 [
+                    hr_idx / 24,
+                    month / 12,
                     prev_price / max_price,
                     self.current_local_price / max_price,
                     self.feedin_price / max_price,
                     self.current_grid_price / max_price,
-                    self.current_total_supply / self.all_max_prod,
+                    self.current_total_supply / self.all_max_daily_demand,
+                    self.current_total_prod / self.all_max_daily_demand,
+                    self.current_total_load / self.all_max_daily_demand,
                     self.current_total_import / self.all_max_daily_demand,
                     self.penalized_amount / self.all_max_daily_demand,
-                    prev_cap_limit / self.all_max_daily_demand,
+                    # prev_cap_limit / self.all_max_daily_demand,
                     self.current_cap_limit / self.all_max_daily_demand,
-                    self.budget_balance / (self.alltime_prosumers_payments + self.alltime_mediator_payments + epsilon),
-                    marginal_netloss / 3000,
+                    self.alltime_mediator_payments / 400000,
+                    self.alltime_prosumers_payments / 400000,
+                    abs(normed_budget_balance),
                     marginal_interactions / 14,
                 ],
                 dtype=np.float32
                 )
             }
+        
 
         for key, value in observation.items():
             observation[key] = np.clip(value, -1, 1)
@@ -446,16 +467,34 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # Compute the budget balance - positive for profit, negative for loss
 
         self.budget_balance = self.alltime_prosumers_payments - self.alltime_mediator_payments
-        budget_signal = pow(abs(self.budget_balance), 3)*0.000000001
-        budget_signal = min(budget_signal, 1)
-        budget_signal = -budget_signal
-        #print(f"BUDGET BALANCE: {self.budget_balance}")
-        #print(f"BUDGET SIGNAL: {budget_signal}")
+        normed_budget_balance = self.budget_balance / (self.alltime_mediator_payments+self.alltime_prosumers_payments+0.000001)
+        
+        print("------- Step: ", ctx.env_view.current_step)
+        print("Mediator net loss", self.alltime_mediator_payments)
+        print("Prosumers net loss", self.alltime_prosumers_payments)
+        print("Normed budget balance", normed_budget_balance)
+        # if ctx.env_view.current_step % 48 == 0:
+        # if abs(self.budget_balance) < 1000:
+        #     budget_signal = 0.1
+        # else:
+        #     #budget_signal = -1
+        #     budget_signal = pow(abs(self.budget_balance), 2)*(-0.000000001)
+        #     budget_signal = budget_signal / 700
+            #budget_signal = np.clip(budget_signal, -1, 1)
+        
+        x = normed_budget_balance
+        # upper_term  = pow(x, 2)
+        # lower_term = 2 * pow(0.1, 2)
+        # exp =  upper_term / lower_term
+        # euler_exp = 1.3 * pow(np.e, -exp)
+        # budget_signal = euler_exp - 0.7
+        
+        lower_term = 0.1 + pow(x, 2)
+        budget_signal = (0.2 / lower_term) - 1.15
 
-        #print(f"MEDIATOR BUDGET BALANCE: {self.budget_balance}")
         # Compute marginal change in overall netloss
         marginal_netloss = self.prev_mediator_netloss - self.mediator_netloss
-        normed_marginal_netloss = marginal_netloss / 3000
+        normed_marginal_netloss = marginal_netloss / 1000
         self.max_reward = max(marginal_netloss, self.max_reward)
         self.min_reward = min(marginal_netloss, self.min_reward)
         #print(f"MAX MARGINAL NET LOSS: {self.max_reward}")
@@ -463,12 +502,13 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # Update previous income
         self.prev_mediator_netloss = self.mediator_netloss
         # Combine weighted reward signals
-        self.reward = budget_signal + normed_marginal_netloss
-        #time.sleep(0.5)
+        self.reward = budget_signal
+        print(self.reward)
+        # self.reward = normed_marginal_netloss + budget_signal
+        #time.sleep(0.01)
         # Clip reward
+        #self.reward = np.clip(self.reward, -1, 1)
 
-        #self.reward = max(min(self.reward, 1), -1)
-        #time.sleep(5)
         return self.reward
     
     
@@ -489,6 +529,14 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.max_price = self.dm.get_all_max_price() + 2.0666
 
         self.all_max_daily_demand = self.dm.get_all_max_daily_demand()
+        self.alltime_mediator_payments = 0
+        self.alltime_prosumers_payments = 0
+        self.mediator_netloss = 0
+        self.prosumers_netloss = 0
+        self.budget_balance = 0
+        self.prev_mediator_netloss = 0
+        self.different_prices = []
+        self.no_different_prices = 0
 
         self.price_array = self.dm.get_price_array()
         self.current_grid_price = self.price_array[0] + self.dso.import_tariffs_winter[0]
@@ -560,8 +608,8 @@ class SimpleCommunityMediator(ph.Agent):#
                 msgs.append(
                     (agent,PriceUpdate(self.current_local_price),)
                 )
-            print(f"-------- Step {ctx.env_view.current_step} CM sending message --------")
-            print(f"Current local price: {self.current_local_price}")
+            # print(f"-------- Step {ctx.env_view.current_step} CM sending message --------")
+            # print(f"Current local price: {self.current_local_price}")
             return msgs
 
 
@@ -687,6 +735,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     @dataclass(frozen=True)
     class ProsumerView(ph.AgentView):
             supply: float
+            current_prod: float
+            current_load: float
             net_loss: float
             income: float
             interactions: float
@@ -769,6 +819,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         """
         return self.ProsumerView(
             supply = self.current_supply,
+            current_prod = self.current_prod,
+            current_load = self.current_load,
             net_loss = self.net_loss,
             income = self.acc_feedin_coin+self.acc_local_market_coin,
             interactions = self.acc_grid_interactions,
@@ -981,8 +1033,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         else:
             noop = 1
 
-        print(f"--------------- STEP {ctx.env_view.current_step} PROSUMER OBSERVATION --------------")
-        print(f"Current local price: ", {self.current_local_price})
+        # print(f"--------------- STEP {ctx.env_view.current_step} PROSUMER OBSERVATION --------------")
+        # print(f"Current local price: ", {self.current_local_price})
         # print(f"Current load: {self.current_load}")
         # print(f"Current production: {self.current_prod}")
         # print(f"Current charge: {self.current_charge}")
@@ -991,13 +1043,13 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # print(f"Acc. income: {self.acc_local_market_coin}")
         # print(f"Acc. cost: {self.acc_local_market_cost}")
 
-        time.sleep(0.1)
+        # time.sleep(0.1)
 
         observation = {
             'observations' : np.array([
                     self.current_local_price / self.max_price,
-                    self.current_load / self.all_max_load,
-                    self.current_prod / self.all_max_prod,
+                    self.current_load / self.all_max_cap,
+                    self.current_prod / self.all_max_cap,
                     self.current_charge / self.all_max_cap,
                     self.battery_cap / self.all_max_cap,
                     self.charge_rate / self.all_max_cap,

@@ -32,7 +32,7 @@ discount = 0.5 # possibly supertype?
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
-mediator = SimpleCommunityMediator('CM', dm=dm)
+mediator = StrategicCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -58,8 +58,13 @@ metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, 
 metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agents, "self_consumption", group_reduce_action="sum")
 metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
 metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
-# metrics["CM/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
-# metrics["CM/penalized_amount"] = ph.metrics.SimpleAgentMetric("CM", "penalized_amount")
+metrics["CM/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
+metrics["CM/penalized_amount"] = ph.metrics.SimpleAgentMetric("CM", "penalized_amount")
+metrics["CM/no_of_diff_actions"] = ph.metrics.SimpleAgentMetric("CM", "no_different_prices")
+metrics["CM/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
+metrics["CM/mediator_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_mediator_payments")
+metrics["CM/prosumers_netloss"] = ph.metrics.SimpleAgentMetric("CM", "prosumers_netloss")
+metrics["CM/prosumers_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_prosumers_payments")
 
 for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
@@ -110,7 +115,7 @@ if sys.argv[1] == "train":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=0.8,
-                    cap_var=0.5
+                    cap_var=0.8
                 )    
             }
         )
@@ -150,8 +155,8 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 "CM": SimpleCommunityMediator.Supertype(
-                    discount=UniformFloatSampler(0.5, 0.5),
-                    std_dev=UniformFloatSampler(0.01, 0.15),
+                    #discount=UniformFloatSampler(0.2, 1),
+                    std_dev=UniformFloatSampler(0.015, 0.1),
                     #std_dev=UniformFloatSampler(0.0, 0.0)
                 )    
             }
@@ -171,11 +176,12 @@ if sys.argv[1] == "train":
         rllib_config={
             #"model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.00001,
-            "entropy_coeff": 0.002,
-            "lambda": 0.95,
-            "gamma": 0.99,
+            "entropy_coeff": 0.125,
+            "lambda": 0.98,
+            "gamma": 0.998,
+            #"num_sgd_iter": 170,
         },
-        iterations=200,
+        iterations=500,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,

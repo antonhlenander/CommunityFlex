@@ -50,6 +50,10 @@ metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local
 metrics["cm/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
 metrics["cm/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
 metrics["cm/capacity_balance"] = ph.metrics.SimpleAgentMetric("CM", "capacity_balance")
+metrics["cm/capacity_limit"] = ph.metrics.SimpleAgentMetric("CM", "current_cap_limit")
+metrics["cm/total_import"] = ph.metrics.SimpleAgentMetric("CM", "current_total_import")
+metrics["cm/total_export"] = ph.metrics.SimpleAgentMetric("CM", "current_total_export")
+metrics["cm/current_grid_price"] = ph.metrics.SimpleAgentMetric("CM", "current_grid_price")
 metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
 metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
 metrics["env/total_charge"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_charge", group_reduce_action="sum")
@@ -165,6 +169,27 @@ elif sys.argv[1] == "rollout":
         )
 
     if setup_type == 'multi':
+        directory = "~/ray_results/community_flex_twolevel_nobalance/LATEST"
+        agent_supertypes.update(
+            {
+                f"H{i}": StrategicProsumerAgent.Supertype(
+                    #capacity=2,
+                    eta=eta,
+                    rollout=1
+                )    
+                for i in range(1, 15)
+            }
+        )
+        agent_supertypes.update(
+            {
+                "CM": StrategicCommunityMediator.Supertype(
+                    cap_var=0.8,
+                    discount=0.8
+                )    
+            }
+        )
+
+    if setup_type == 'multsing':
         directory = "~/ray_results/community_flex_singlepolicy/LATEST/"
         agent_supertypes.update(
             {
@@ -178,30 +203,10 @@ elif sys.argv[1] == "rollout":
         )
         agent_supertypes.update(
             {
-                "CM": StrategicCommunityMediator.Supertype(
-                    cap_var=0.5,
-                    discount=0.5
-                )    
-            }
-        )
-
-    if setup_type == 'multsing':
-        directory = "~/ray_results/community_flex_twolevel/LATEST/"
-        agent_supertypes.update(
-            {
-                f"H{i}": StrategicProsumerAgent.Supertype(
-                    #capacity=2,
-                    eta=eta,
-                    rollout=1
-                )    
-                for i in range(1, 15)
-            }
-        )
-        agent_supertypes.update(
-            {
-                "CM": StrategicCommunityMediator.Supertype(
-                    cap_var=0.5,
-                    discount=0.5
+                "CM": SimpleCommunityMediator.Supertype(
+                    #cap_var=0.5,
+                    #discount=0.5
+                    std_dev=0
                 )    
             }
         )
@@ -224,7 +229,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/flex_test_fixedprices/"
+    path = f"output/flex_twolevel/"
     if not os.path.exists(path):
         os.makedirs(path)
 

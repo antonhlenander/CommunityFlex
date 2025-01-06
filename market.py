@@ -57,7 +57,7 @@ class Market():
                 local_amount = sell_amount * fraction
                 grid_amount = sell_amount * (1-fraction)
                 prosumer_income = sell_amount * local_price
-                mediator_income = grid_amount * feedin_price 
+                mediator_income = grid_amount * feedin_price
                 cleared_sell_bids.append((seller_id, sell_amount, local_amount, grid_amount, prosumer_income, mediator_income))
 
         return cleared_buy_bids, cleared_sell_bids
