@@ -22,11 +22,11 @@ NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.75
 rotate = False
-no_agents = 14
+no_agents = 5
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/eval/demandprofiles.csv', cap_path='data/eval/caps.csv')
-mediator = StrategicCommunityMediator('CM', dm=dm,)
+mediator = StrategicCommunityMediator('CM', dm=dm, no_agents=no_agents)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -48,6 +48,7 @@ metrics = {}
 
 metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
 metrics["cm/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
+metrics["cm/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
 metrics["cm/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
 metrics["cm/capacity_balance"] = ph.metrics.SimpleAgentMetric("CM", "capacity_balance")
 metrics["cm/capacity_limit"] = ph.metrics.SimpleAgentMetric("CM", "current_cap_limit")
@@ -66,6 +67,7 @@ metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "n
 metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
 metrics["env/min_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="min")
 metrics["env/max_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="max")
+metrics["cm/rewards"] = ph.metrics.SimpleAgentMetric("CM", "acc_reward")
 
 
 for aid in (follower_agents):
@@ -189,6 +191,27 @@ elif sys.argv[1] == "rollout":
             }
         )
 
+    if setup_type == 'simple':
+        directory = "~/ray_results/community_flex_balanceonly/LATEST/"
+        agent_supertypes.update(
+            {
+                f"H{i}": SimpleProsumerAgent.Supertype(
+                    capacity=1,
+                    eta=eta,
+                    rollout=0
+                )    
+                for i in range(1, 6)
+            }
+        )
+        agent_supertypes.update(
+            {
+                "CM": StrategicCommunityMediator.Supertype(
+                    cap_var=0.5,
+                    discount=0.5,
+                )    
+            }
+        )
+
     if setup_type == 'multsing':
         directory = "~/ray_results/community_flex_singlepolicy/LATEST/"
         agent_supertypes.update(
@@ -222,14 +245,14 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        num_repeats=1,
+        num_repeats=5,
         num_workers=1,
         metrics=metrics,
     )
 
     results = list(results)
 
-    path = f"output/flex_twolevel/"
+    path = f"output/flex_balanceonly/"
     if not os.path.exists(path):
         os.makedirs(path)
 

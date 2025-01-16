@@ -164,10 +164,10 @@ class StackelbergRewardDelayEnv(PhantomEnv):
                     observations[aid] = obs
                     infos[aid] = ctx.agent.collect_infos(ctx)
 
-            if evenstep:
-                self._rewards[aid] = ctx.agent.compute_reward(ctx)
-            # if aid in acting_agents:
+            # if evenstep:
             #     self._rewards[aid] = ctx.agent.compute_reward(ctx)
+            if aid in acting_agents:
+                self._rewards[aid] = ctx.agent.compute_reward(ctx)
 
             terminations[aid] = ctx.agent.is_terminated(ctx)
             truncations[aid] = ctx.agent.is_truncated(ctx)
