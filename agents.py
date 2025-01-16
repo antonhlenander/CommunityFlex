@@ -220,12 +220,6 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         #new_action = self.current_grid_price / self.max_price
         #index = int(39*new_action)
         self.current_local_price = self.prices[action]
-        #print("SET PRICE: ", self.current_local_price)
-
-        # if self.current_local_price not in self.different_prices:
-        #     self.different_prices.append(self.current_local_price)
-
-        # self.no_different_prices = len(self.different_prices)
 
         msgs = []
         for agent in ctx.neighbour_ids:
@@ -596,17 +590,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.feedin_price = self.price_array[0] - self.dso.export_tariff
         self.current_local_tariff = self.dso.import_tariffs_winter[0]
         # TODO: Let's see what happens if max price is doubled
-        #self.max_price = self.max_price * 2
-        self.prices = np.linspace(self.min_price/2, self.max_price, num=40)
-        random.seed(time.time())
-        self.cycles = random.randint(4, 11)
-        self.displacement = random.randint(1, 7)
-        self.squeeze = random.randint(1, 2)
-        # plt.plot(self.price_plot)
-        # plt.savefig("price_plot.png")
-        # plt.close()
-        # self.price_plot = []
-        print(self.prices)
+
 
 
 ##############################################################
@@ -1417,7 +1401,7 @@ class SimpleProsumerAgent(ph.Agent):
             self.type.capacity = self.dm.get_agent_cap(self.id, self.episode)
             print(f"Agent {self.id} capacity set to {self.type.capacity} for episode {self.episode}")
         # Get battery capacity
-        self.battery_cap = 5*self.type.capacity
+        self.battery_cap = 0 #5*self.type.capacity
         # Get charge rate
         self.charge_rate = self.battery_cap / 2
         # Get demand data for first step
