@@ -217,9 +217,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
 
-        new_action = self.current_grid_price / self.max_price
-        index = int(39*new_action)
-        self.current_local_price = self.prices[index]
+        #new_action = self.current_grid_price / self.max_price
+        #index = int(39*new_action)
+        self.current_local_price = self.prices[action]
         #print("SET PRICE: ", self.current_local_price)
 
         # if self.current_local_price not in self.different_prices:
