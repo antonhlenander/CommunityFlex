@@ -372,7 +372,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.current_cap_limit = self.yearly_cap_limits[hr_idx]
             next_cap_limits = self.yearly_cap_limits[sim_step:sim_step+12]
             #self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
-            self.current_grid_price = self.prices[20]
+            self.current_grid_price = self.prices[39]
             #self.feedin_price = self.price_array[sim_step] - self.dso.export_tariff
             self.feedin_price = self.current_grid_price - self.dso.export_tariff
             self.current_local_tariff = self.dso.import_tariffs_winter[0]
@@ -575,7 +575,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.alltime_prosumers_payments = 0
         self.alltime_prosumers_income = 0
         self.mediator_netloss = 30000
-        self.prosumers_netloss = 20000
+        self.prosumers_netloss = 30000
         self.budget_balance = self.prosumers_netloss - self.mediator_netloss
         self.prev_mediator_netloss = 0
         self.prev_budget_signal = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
