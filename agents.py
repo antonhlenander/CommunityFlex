@@ -182,6 +182,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.action_space = gym.spaces.Discrete(40)
 
 
+
     def view(self, neighbour_id=None) -> ph.View:
         return self.MediatorView(
             current_grid_price = self.current_grid_price,
@@ -216,9 +217,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
-
-        #new_action = self.current_grid_price / self.max_price
-        #index = int(39*new_action)
+        #i = 39
+        print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR ACTION ------------------")
+        print(f"Action: {action}")
+        print(f"Price: {self.prices[action]}")
         self.current_local_price = self.prices[action]
 
         msgs = []
@@ -226,7 +228,6 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             msgs.append(
                 (agent,PriceUpdate(self.current_local_price),)
             )
-
         return msgs
 
     def handle_batch(
@@ -356,10 +357,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         day = (sim_step // 24)
         month = day // 30
 
-        # print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR OBSERVATION ------------------")
-        # DAILY COMPUTES AT END OF DAY AND AFTER RESET
-        # Computations at even step for CM to observe at beginning of the next day
-        ###############################################################
+        print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR OBSERVATION ------------------")
+
         if step == 0:
             self.yearly_cap_limits = self.dso.compute_yearly_capacity_limits(self.type.cap_var, ctx)
             # Extends yearly_cap_limits such that we dont get out of bounds error
@@ -373,29 +372,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.current_cap_limit = self.yearly_cap_limits[hr_idx]
             next_cap_limits = self.yearly_cap_limits[sim_step:sim_step+12]
             #self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
-            a = 0.45 * (1.1 + np.sin((2 * np.pi * (sim_step) / 17280 / self.squeeze)+self.displacement))
-            upper_sin = 0.4 * a * (2.2 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
-            lower_sin = 0.4 * a * (1.1 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
-            upper = self.prices[min(int(upper_sin*39), 39)]
-            lower = self.prices[min(int(lower_sin*39), 39)]
-            daily = ((lower+upper)/2) + ((upper-lower)/2) * np.sin((2*np.pi*(sim_step) / 24))
-            self.price_plot.append(daily)
-            self.current_grid_price = daily
+            self.current_grid_price = self.prices[20]
             #self.feedin_price = self.price_array[sim_step] - self.dso.export_tariff
             self.feedin_price = self.current_grid_price - self.dso.export_tariff
-            self.current_local_tariff = self.dso.import_tariffs_winter[hr_idx]*(1-self.type.discount)
+            self.current_local_tariff = self.dso.import_tariffs_winter[0]
 
-            #print(f"DAILY RESIDUAL DEMAND: {self.next_residual_demand}")
-            #print(f"NEXT CAP LIMITS: {next_cap_limits}")
-            #print(f"SUM OF CAP LIMITS: {np.sum(next_cap_limits)}")
         
-        #print(f"CURRENT LOCAL PRICE: {self.current_local_price}")
-        # print(f"CURRENT GRID PRICE: {self.current_grid_price}")
-        # print(f"CURRENT FEEDIN PRICE: {self.feedin_price}")
-        # print(f"CURRENT LOCAL TARIFF: {self.current_local_tariff}")
-        #print(f"STEP CURRENT TOTAL IMPORT: {self.current_total_import}")
-        #print(f"STEP CAP LIMIT: {self.prev_cap_limit}")
-
         # Compute the budget balance - positive for profit, negative for loss
         self.budget_balance = self.prosumers_netloss - self.mediator_netloss
         normed_budget_balance = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
@@ -420,16 +402,29 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         epsilon = 0.000001
 
         # print(f"Capacity limits:", next_cap_limits)
-        # print(f"Prev price: {prev_price}")
-        # print(f"Current local price: {self.current_local_price}")
+        #print(f"Prev price: {prev_price}")
+        print(f"Hour: {hr_idx}")
+        print(f"Current local price: {self.current_local_price}")
+        print(f"Current local price normed: {self.current_local_price / max_price}")
+        print(f"Current grid price: {self.current_grid_price}")
+        print(f"Current grid price normed: {self.current_grid_price / max_price}")
+    
+  
+
+
         # print(f"Current feedin price: {self.feedin_price}")
-        # print(f"Current grid price: {self.current_grid_price}")
-        # print(f"Current total supply in next step: {self.current_total_supply}")
+        # print(f"Current feedin price: {self.feedin_price / max_price}")
+        #print(f"Current total supply in next step: {self.current_total_supply}")
         # print(f"Import in this ending step {self.current_total_import}")
         # print(f"Penalized amount: {self.penalized_amount}")
         # print(f"The cap limit for the ending step: {prev_cap_limit}")
         # print(f"The cap limit for the coming step: {self.current_cap_limit}")
-        # print(f"The budget balance: {self.budget_balance}")
+        print(f"Mediator net loss: {self.mediator_netloss}")
+        print(f"Prosumers net loss: {self.prosumers_netloss}")
+        print(f"The budget balance: {self.budget_balance}")
+        print(f"Normed budget balance: {normed_budget_balance}")
+        print(f"Normed positive budget balance: {max(normed_budget_balance, 0)}")
+        print(f"Normed negative budget balance: {abs(min(normed_budget_balance, 0))}")
         # time.sleep(0.1)
         # print(f"Marginal net loss: {marginal_netloss}")
 
@@ -447,9 +442,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                     self.current_local_price / max_price,
                     self.feedin_price / max_price,
                     self.current_grid_price / max_price,
-                    #self.current_total_supply / self.all_max_daily_demand,
+                    # self.current_total_supply / self.all_max_daily_demand,
                     #self.current_total_prod / self.all_max_daily_demand,
-                    #self.current_total_load / self.all_max_daily_demand,
+                    # self.current_total_load / self.all_max_daily_demand,
                     #self.current_total_import / self.all_max_daily_demand,
                     #self.penalized_amount / self.all_max_daily_demand,
                     # prev_cap_limit / self.all_max_daily_demand,
@@ -464,7 +459,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                 dtype=np.float32
                 )
             }
-        # print(f"Observation: {observation}")
+        print(f"Observation: {observation}")
         # time.sleep(0.5)
 
         for key, value in observation.items():
@@ -483,6 +478,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         step = ctx.env_view.current_step
         sim_step = (step + 1) // 2
         hour = ((sim_step-1) % 24) + 1
+
+        print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR COMPUTE REWARD ------------------")
 
         self.budget_balance = self.prosumers_netloss - self.mediator_netloss
         normed_budget_balance = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
@@ -531,17 +528,18 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.prev_budget_signal = normed_budget_balance
 
         # Combine weighted reward signals
-        # if budget_signal > 0:
-        #     self.reward = budget_signal + marginal_balance
-        # if budget_signal < 0:
-        #     self.reward = marginal_balance
+        if budget_signal > 0:
+            self.reward = budget_signal + marginal_change * 1000
+        if budget_signal < 0:
+            self.reward = 1000 * marginal_change
         #if sim_step % 48:
-        self.reward = budget_signal #+ marginal_change*1000
+        #self.reward = marginal_change * 1000
         # print("MEDIATOR NET LOSS: ", self.mediator_netloss)
         # print("PROSUMERS NET LOSS: ", self.prosumers_netloss)
         # print("BALANCE: ", self.normed_balance)
         # print("REWARD: ", self.reward)
         self.acc_reward += self.reward
+        print("Reward: ", self.reward)
     
 
         # print("hour: ", hour)
@@ -576,10 +574,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.alltime_mediator_income = 0
         self.alltime_prosumers_payments = 0
         self.alltime_prosumers_income = 0
-        self.mediator_netloss = 0
-        self.prosumers_netloss = 0
-        self.budget_balance = 0
+        self.mediator_netloss = 30000
+        self.prosumers_netloss = 20000
+        self.budget_balance = self.prosumers_netloss - self.mediator_netloss
         self.prev_mediator_netloss = 0
+        self.prev_budget_signal = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
         self.different_prices = []
         self.no_different_prices = 0
         self.acc_reward = 0
@@ -590,6 +589,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.feedin_price = self.price_array[0] - self.dso.export_tariff
         self.current_local_tariff = self.dso.import_tariffs_winter[0]
         # TODO: Let's see what happens if max price is doubled
+        self.prices = np.linspace(self.min_price/2, self.max_price, num=40)
+        random.seed(time.time())
+        self.cycles = random.randint(4, 11)
+        self.displacement = random.randint(1, 7)
+        self.squeeze = random.randint(1, 2)
 
 
 

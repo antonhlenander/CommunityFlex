@@ -18,7 +18,7 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 
 # Params
-NUM_EPISODE_STEPS = 8735*2
+NUM_EPISODE_STEPS = 4
 eta = 0.1 # should this be trainable?
 greed = 0.75
 rotate = False
@@ -245,7 +245,7 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        num_repeats=5,
+        num_repeats=1,
         num_workers=1,
         metrics=metrics,
     )

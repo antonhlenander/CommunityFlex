@@ -23,7 +23,7 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 8735*2
+NUM_EPISODE_STEPS = 2
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
@@ -182,7 +182,7 @@ if sys.argv[1] == "train":
             "gamma": 0.99,
             #"num_sgd_iter": 170,
         },
-        iterations=500,
+        iterations=1,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
@@ -327,20 +327,35 @@ elif sys.argv[1] == "rollout":
 elif sys.argv[1] == "test":
     # Define agent supertypes
     agent_supertypes = {}
-    agent_supertypes.update(
-        {
-            f"H{i}": SimpleProsumerAgent.Supertype(
-                capacity=UniformIntSampler(1, 4),
-                greed=UniformFloatSampler(0.5, 1.0),
-                eta=UniformFloatSampler(eta, eta)
+    if setup_type == 'simple':
+        agent_supertypes.update(
+            {
+                f"H{i}": SimpleProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 2),
+                    greed=UniformFloatSampler(0.5, 1),
+                    eta=UniformFloatSampler(eta, eta)
+                )    
+                for i in range(1, no_agents+1)
+            }
+        )
 
-            )    
-            for i in range(1, 15)
-        },
-    )
+        policies = {"mediator_policy": ["CM"]}
+   
+    if setup_type == 'single':
+        agent_supertypes.update(
+            {
+                f"H{i}": SimpleProsumerAgent.Supertype(
+                    capacity=UniformIntSampler(1, 4),
+                    greed=UniformFloatSampler(0.5, 1.0),
+                    eta=UniformFloatSampler(eta, eta)
+
+                )    
+                for i in range(1, 15)
+            },
+        )
 
     # Define environment
-    env = stackelberg_custom.StackelbergEnvCustom(
+    env = StackelbergRewardDelayEnv(
         num_steps=NUM_EPISODE_STEPS, 
         network=network,
         leader_agents=leader_agents,
@@ -350,14 +365,14 @@ elif sys.argv[1] == "test":
     
     terminate = False
     episodes = 0
+    all_rewards = []
 
-    while episodes < 10:
+    while episodes < 40:
         observations = env.reset()
     
         while env.current_step < env.num_steps:
             actions = {
-                agent.id: agent.action_space.sample()
-                for agent in env.strategic_agents
+                "CM": episodes
             }
             # log simple agent actions?
             # log messages?
@@ -366,8 +381,29 @@ elif sys.argv[1] == "test":
             if env.current_step+1 == env.num_steps:
                 terminate = True
 
-            step = env.step(actions, terminate)
+            step = env.step(actions)
             observations = step.observations
             rewards = step.rewards
-            infos = step.infos
+            if 'CM' in rewards:
+                all_rewards.append(rewards['CM'])
+            
+            #infos = step.infos
         episodes += 1
+
+    print(all_rewards)
+    i = 39
+    max_price = dm.get_all_max_price() + 2.0666
+    min_price = dm.get_all_min_price() + 0.2296
+    prices = np.linspace(min_price/2, max_price, num=40)
+    price = prices[i]
+    plt.title(f"Reward distribution at grid price {price} when NBB is 0.6")
+
+    plt
+    plt.xticks(prices)
+    plt.xlabel("Local dynamic price (action)")
+    plt.ylabel("Reward")
+    plt.scatter(prices, all_rewards)
+    plt.xticks(np.linspace(min_price/2, max_price, num=10))
+    plt.legend()
+    plt.savefig(f"output/reward_dist/rewards_price_{price}.png")
+    plt.close()
