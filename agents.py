@@ -493,18 +493,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.budget_balance = self.prosumers_netloss - self.mediator_netloss
         normed_budget_balance = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
         self.normed_balance = normed_budget_balance
-        # print("------- Step: ", ctx.env_view.current_step)
-        # print("Mediator net loss", self.alltime_mediator_payments)
-        # print("Prosumers net loss", self.alltime_prosumers_payments)
-        # print("Normed budget balance", normed_budget_balance)
-        # if ctx.env_view.current_step % 48 == 0:
-        # if abs(self.budget_balance) < 1000:
-        #     budget_signal = 0.1
-        # else:
-        #     #budget_signal = -1
-        #     budget_signal = pow(abs(self.budget_balance), 2)*(-0.000000001)
-        #     budget_signal = budget_signal / 700
-            #budget_signal = np.clip(budget_signal, -1, 1)
+    
         
         x = normed_budget_balance
         # upper_term  = pow(x, 2)
@@ -520,30 +509,18 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         lower_term = 0.1 + pow(x, 2)
         budget_signal = (0.2 / lower_term) - 1
 
-        # Compute marginal change in overall netloss
-        # marginal_netloss = self.prev_mediator_netloss - self.mediator_netloss
-        # normed_marginal_netloss = marginal_netloss / 1000
-        # self.max_reward = max(marginal_netloss, self.max_reward)
-        # self.min_reward = min(marginal_netloss, self.min_reward)
-        # #print(f"MAX MARGINAL NET LOSS: {self.max_reward}")
-        # #print(f"MIN MARGINAL NET LOSS: {self.min_reward}")
-        # # Update previous income
-        # self.prev_mediator_netloss = self.mediator_netloss
-
         # Compute marginal budget change
-        # USING OLD VARIABLE NAMES, IT IS THE NORMED BALANCE MINUS PREV NORMED BALANCE
-        marginal_change =  abs(self.prev_budget_signal) - abs(normed_budget_balance)
-        # Update previous budget balance
-        self.prev_budget_signal = normed_budget_balance
+        delta_prosumer = self.prosumers_netloss - self.prev_prosumers_netloss
+        delta_mediator = self.mediator_netloss - self.prev_mediator_netloss
+        marginal_profit = delta_mediator - delta_prosumer
+        normed_marginal_profit = marginal_profit / (self.mediator_netloss+self.prosumers_netloss+0.000000001)
 
-        # Combine weighted reward signals
-        # if budget_signal > 0:
-        #     self.reward = budget_signal + marginal_balance
-        # if budget_signal < 0:
-        #     self.reward = marginal_balance
-        #if sim_step % 48:
-        self.reward = budget_signal #+ marginal_change*1000
-        # print("MEDIATOR NET LOSS: ", self.mediator_netloss)
+        self.prev_prosumers_netloss = self.prosumers_netloss
+        self.prev_mediator_netloss = self.mediator_netloss
+    
+        self.reward = normed_marginal_profit
+   
+        # print("MEDIATOR NET LOSS: ", self.medif sim_step % 48:iator_netloss)
         # print("PROSUMERS NET LOSS: ", self.prosumers_netloss)
         # print("BALANCE: ", self.normed_balance)
         # print("REWARD: ", self.reward)

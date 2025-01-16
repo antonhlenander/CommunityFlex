@@ -180,7 +180,7 @@ if sys.argv[1] == "train":
             "entropy_coeff": 0.125,
             "lambda": 0.96,
             "gamma": 0.99,
-            #"num_sgd_iter": 170,
+            "num_sgd_iter": 170,
         },
         iterations=500,
         checkpoint_freq=1,
