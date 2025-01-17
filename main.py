@@ -133,7 +133,7 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=UniformIntSampler(1, 2),
+                    capacity=0,
                     greed=UniformFloatSampler(0.5, 1),
                     eta=UniformFloatSampler(eta, eta)
                 )    
