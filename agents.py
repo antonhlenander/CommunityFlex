@@ -523,15 +523,16 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         # Compute marginal budget change
         # USING OLD VARIABLE NAMES, IT IS THE NORMED BALANCE MINUS PREV NORMED BALANCE
-        marginal_change =  abs(self.prev_budget_signal) - abs(normed_budget_balance)
-        # Update previous budget balance
-        self.prev_budget_signal = normed_budget_balance
+        marginal_budget =  abs(self.prev_budget_balance) - abs(self.budget_balance)
+        self.prev_budget_balance = self.budget_balance
 
-        # Combine weighted reward signals
+        normed_marginal_change = marginal_budget / 100
+
         if budget_signal > 0:
-            self.reward = budget_signal + marginal_change * 1000
+            self.reward = budget_signal + marginal_budget / 100
+        
         if budget_signal < 0:
-            self.reward = 1000 * marginal_change
+            self.reward = marginal_budget / 100
         #if sim_step % 48:
         #self.reward = marginal_change * 1000
         # print("MEDIATOR NET LOSS: ", self.mediator_netloss)
@@ -574,11 +575,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.alltime_mediator_income = 0
         self.alltime_prosumers_payments = 0
         self.alltime_prosumers_income = 0
-        self.mediator_netloss = 30000
-        self.prosumers_netloss = 30000
+        self.mediator_netloss = 5000
+        self.prosumers_netloss = 20000
         self.budget_balance = self.prosumers_netloss - self.mediator_netloss
         self.prev_mediator_netloss = 0
-        self.prev_budget_signal = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
+        self.prev_budget_balance = 15000
         self.different_prices = []
         self.no_different_prices = 0
         self.acc_reward = 0
