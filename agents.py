@@ -169,6 +169,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # Training stats
         self.different_prices = []
         self.no_different_prices = 0 
+        self.random_day = 0
 
         # Community net loss
         self.community_net_loss: float = 0
@@ -177,11 +178,13 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.community_self_sufficiency: float = 0
 
         self.price_plot = []
+        self.action_plot = []
+        self.balance_plot = []
 
         self.prices = np.ndarray(50)
 
         #self.action_space = gym.spaces.Discrete(50)
-        self.action_space = gym.spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        self.action_space = gym.spaces.Box(low=0.05, high=1, shape=(1,), dtype=np.float32)
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -219,12 +222,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
 
-        print(f"------------------ MEDIATOR ACTION step {ctx.env_view.current_step} ------------------")
+        #print(f"------------------ MEDIATOR ACTION step {ctx.env_view.current_step} ------------------")
         #self.current_local_price = self.prices[5]
         self.current_local_price = self.max_price * action[0]
-        print(f"ACTION: ", action[0])
-        print("SET PRICE: ", self.current_local_price)
-
+        #print(f"ACTION: ", action[0])
+        #print("SET PRICE: ", self.current_local_price)
+        self.action_plot.append(self.current_local_price)
 
         msgs = []
         for agent in ctx.neighbour_ids:
@@ -355,7 +358,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
     def encode_observation(self, ctx: ph.Context):
         step = ctx.env_view.current_step
-        sim_step = (step + 1) // 2 #self.random_day
+        sim_step = (step + 1) // 2  + min(self.random_day, 8735)
         hour = ((sim_step-1) % 24) + 1
         hr_idx = sim_step % 24
         day = (sim_step // 24)
@@ -384,9 +387,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             upper = self.prices[min(int(upper_sin*39), 39)]
             lower = self.prices[min(int(lower_sin*39), 39)]
             daily = ((lower+upper)/2) + ((upper-lower)/2) * np.sin((2*np.pi*(sim_step) / 24))
-            self.price_plot.append(daily)
+            #self.price_plot.append(daily)
             #self.current_grid_price = daily
             self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
+            self.price_plot.append(self.current_grid_price)
             self.feedin_price = self.current_grid_price - self.dso.export_tariff
             self.current_local_tariff = self.dso.import_tariffs_winter[hr_idx]*(1-self.type.discount)
 
@@ -394,8 +398,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             #print(f"NEXT CAP LIMITS: {next_cap_limits}")
             #print(f"SUM OF CAP LIMITS: {np.sum(next_cap_limits)}")
         
-        print(f"CURRENT LOCAL PRICE: {self.current_local_price}")
-        print(f"CURRENT GRID PRICE: {self.current_grid_price}")
+        #print(f"CURRENT LOCAL PRICE: {self.current_local_price}")
+        #print(f"CURRENT GRID PRICE: {self.current_grid_price}")
         # print(f"CURRENT FEEDIN PRICE: {self.feedin_price}")
         # print(f"CURRENT LOCAL TARIFF: {self.current_local_tariff}")
         #print(f"STEP CURRENT TOTAL IMPORT: {self.current_total_import}")
@@ -496,6 +500,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     
         
         x = normed_budget_balance
+        self.balance_plot.append(x)
         # upper_term  = pow(x, 2)
         # lower_term = 2 * pow(0.1, 2)
         # exp =  upper_term / lower_term
@@ -508,7 +513,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         lower_term = 0.1 + pow(x, 2)
         budget_signal = (0.2 / lower_term) - 1
-        print("BUDGET BALANCE: ", self.budget_balance)
+        #print("BUDGET BALANCE: ", self.budget_balance)
         # Compute marginal budget change
         marginal_budget =  abs(self.prev_budget_balance) - abs(self.budget_balance)
         self.prev_budget_balance = self.budget_balance
@@ -527,15 +532,17 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         #         self.reward = -1
         #else:
             #self.reward = -(normed_marginal_change
-        factor = pow(hour, 3) / pow(24, 3)
-        self.reward = factor*budget_signal
+
+        #factor = pow(hour, 3) / pow(24, 3)
+        #self.reward = factor*budget_signal
+        self.reward = budget_signal
 
         #print("MARGINAL CHANGE: ", marginal_budget)
         # print("MEDIATOR NET LOSS: ", self.medif sim_step % 48:iator_netloss)
         # print("PROSUMERS NET LOSS: ", self.prosumers_netloss)
-        print("NORM BALANCE: ", self.normed_balance)
+        #print("NORM BALANCE: ", self.normed_balance)
         # print("NORM MARGINAL CHANGE:", normed_marginal_change)
-        print("REWARD: ", self.reward)
+        #print("REWARD: ", self.reward)
     
         #print("REWARD: ", self.reward)
         self.acc_reward += self.reward
@@ -544,7 +551,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # print("hour: ", hour)
         #print("reward: ", self.reward)
         # self.reward = normed_marginal_netloss + budget_signal
-        time.sleep(0.1)
+        #time.sleep(0.1)
         # Clip reward
         #self.reward = np.clip(self.reward, -1, 1)
 
@@ -589,17 +596,27 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.feedin_price = self.price_array[0] - self.dso.export_tariff
         self.current_local_tariff = self.dso.import_tariffs_winter[0]
         # TODO: Let's see what happens if max price is doubled
-        self.max_price = self.max_price * 2
+        #self.max_price = self.max_price * 2
         self.prices = np.linspace(0.1, self.max_price, num=50)
         random.seed(time.time())
         self.cycles = random.randint(4, 11)
         self.displacement = random.randint(1, 7)
         self.squeeze = random.randint(1, 2)
-        # plt.plot(self.price_plot)
-        # plt.savefig("price_plot.png")
-        # plt.close()
-        # self.price_plot = []
-        print(self.prices)
+        #self.random_day = (random.randint(0, 363)*24)-1
+        # PLOTTING
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+        ax1.plot(self.price_plot, 'r-')
+        ax1.plot(self.action_plot, 'g-')
+        ax1.set_ylim(0, 16)
+        ax2.set_ylim(-1, 1)
+        ax2.plot(self.balance_plot, 'b-')
+        plt.savefig("price_plot.png")
+        plt.close()
+        self.price_plot = []
+        self.action_plot = []
+        self.balance_plot = []
+        #print(self.prices)
 
 
 ##############################################################

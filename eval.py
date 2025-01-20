@@ -18,7 +18,7 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 
 # Params
-NUM_EPISODE_STEPS = 48*2
+NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.75
 rotate = False
