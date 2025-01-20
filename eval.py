@@ -18,7 +18,7 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 
 # Params
-NUM_EPISODE_STEPS = 8735*2
+NUM_EPISODE_STEPS = 48*2
 eta = 0.1 # should this be trainable?
 greed = 0.75
 rotate = False
@@ -192,11 +192,13 @@ elif sys.argv[1] == "rollout":
         )
 
     if setup_type == 'simple':
+        #directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/PPO_StackelbergRewardDelayEnv_2025-01-20_13-45-125p9bat23/"
         directory = "~/ray_results/community_flex_balanceonly/LATEST/"
+        #checkpoint = 100
         agent_supertypes.update(
             {
                 f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=1,
+                    capacity=0,
                     eta=eta,
                     rollout=0
                 )    
@@ -237,6 +239,7 @@ elif sys.argv[1] == "rollout":
 
     results = ph.utils.rllib.rollout(
         directory=directory,
+        #checkpoint=checkpoint,
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
@@ -245,7 +248,7 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        num_repeats=5,
+        num_repeats=1,
         num_workers=1,
         metrics=metrics,
     )
