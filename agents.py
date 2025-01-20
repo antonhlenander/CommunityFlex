@@ -526,13 +526,13 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         marginal_budget =  abs(self.prev_budget_balance) - abs(self.budget_balance)
         self.prev_budget_balance = self.budget_balance
 
-        normed_marginal_change = marginal_budget / 100
+        normed_marginal_change = marginal_budget / 50
 
         if budget_signal > 0:
-            self.reward = budget_signal + marginal_budget / 100
+            self.reward = budget_signal + marginal_budget / 50
         
         if budget_signal < 0:
-            self.reward = marginal_budget / 100
+            self.reward = marginal_budget / 50
         #if sim_step % 48:
         #self.reward = marginal_change * 1000
         # print("MEDIATOR NET LOSS: ", self.mediator_netloss)
