@@ -218,12 +218,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.acc_total_interactions = 0
         self.current_total_import = 0
         self.current_total_export = 0
+        # self.prosumers_netloss = 0
+        # self.mediator_netloss = 0
+        # self.budget_balance = 0
 
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
 
         #print(f"------------------ MEDIATOR ACTION step {ctx.env_view.current_step} ------------------")
-        #self.current_local_price = self.prices[5]
+        #self.current_local_price = self.prices[action]
         self.current_local_price = self.max_price * action[0]
         #print(f"ACTION: ", action[0])
         #print("SET PRICE: ", self.current_local_price)
@@ -364,7 +367,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         day = (sim_step // 24)
         month = day // 30
 
-        print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR OBSERVATION ------------------")
+        #print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR OBSERVATION ------------------")
         # DAILY COMPUTES AT END OF DAY AND AFTER RESET
         # Computations at even step for CM to observe at beginning of the next day
         ###############################################################
@@ -547,6 +550,19 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         #print("REWARD: ", self.reward)
         self.acc_reward += self.reward
     
+        # if step % 48 == 0:
+        #     fig, ax1 = plt.subplots()
+        #     ax2 = ax1.twinx()
+        #     ax1.plot(self.price_plot, 'r-')
+        #     ax1.plot(self.action_plot, 'g-')
+        #     ax1.set_ylim(0, self.max_price)
+        #     ax2.set_ylim(-1, 1)
+        #     ax2.plot(self.balance_plot, color='black')
+        #     plt.savefig("price_plot.png")
+        #     plt.close()
+        #     self.price_plot = []
+        #     self.action_plot = []
+        #     self.balance_plot = []
 
         # print("hour: ", hour)
         #print("reward: ", self.reward)
@@ -596,7 +612,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.feedin_price = self.price_array[0] - self.dso.export_tariff
         self.current_local_tariff = self.dso.import_tariffs_winter[0]
         # TODO: Let's see what happens if max price is doubled
-        #self.max_price = self.max_price * 2
+        self.max_price = self.max_price * 2
         self.prices = np.linspace(0.1, self.max_price, num=50)
         random.seed(time.time())
         self.cycles = random.randint(4, 11)
@@ -604,15 +620,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.squeeze = random.randint(1, 2)
         #self.random_day = (random.randint(0, 363)*24)-1
         # PLOTTING
-        fig, ax1 = plt.subplots()
-        ax2 = ax1.twinx()
-        ax1.plot(self.price_plot, 'r-')
-        ax1.plot(self.action_plot, 'g-')
-        ax1.set_ylim(0, 16)
-        ax2.set_ylim(-1, 1)
-        ax2.plot(self.balance_plot, 'b-')
-        plt.savefig("price_plot.png")
-        plt.close()
+        # fig, ax1 = plt.subplots()
+        # ax2 = ax1.twinx()
+        # ax1.plot(self.price_plot, 'r-')
+        # ax1.plot(self.action_plot, 'g-')
+        # ax1.set_ylim(0, self.max_price)
+        # ax2.set_ylim(-1, 1)
+        # ax2.plot(self.balance_plot, color='black')
+        # plt.savefig("price_plot.png")
+        # plt.close()
         self.price_plot = []
         self.action_plot = []
         self.balance_plot = []

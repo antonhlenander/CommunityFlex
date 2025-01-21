@@ -193,8 +193,9 @@ elif sys.argv[1] == "rollout":
 
     if setup_type == 'simple':
         #directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/PPO_StackelbergRewardDelayEnv_2025-01-20_13-45-125p9bat23/"
-        directory = "~/ray_results/community_flex_balanceonly/LATEST/"
-        #checkpoint = 100
+        #directory = "~/ray_results/community_flex_balanceonly/LATEST/"
+        directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/good_0to15"
+        checkpoint = 876
         agent_supertypes.update(
             {
                 f"H{i}": SimpleProsumerAgent.Supertype(
@@ -248,6 +249,7 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
+        explore=False,
         num_repeats=1,
         num_workers=1,
         metrics=metrics,

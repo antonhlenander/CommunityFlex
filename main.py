@@ -23,7 +23,7 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 48 #8735*2
+NUM_EPISODE_STEPS = 48
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
@@ -177,10 +177,10 @@ if sys.argv[1] == "train":
         rllib_config={
             #"model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.00001,
-            "entropy_coeff": 0.05,
+            "entropy_coeff": 0.00,
             "lambda": 0.96,
             "gamma": 0.99,
-            #"num_sgd_iter": 170,
+            #"num_sgd_iter": 1000,
         },
         iterations=2000,
         checkpoint_freq=1,
