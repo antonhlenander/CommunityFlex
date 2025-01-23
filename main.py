@@ -23,7 +23,7 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 48
+NUM_EPISODE_STEPS = 48*30
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
@@ -93,7 +93,6 @@ infos = {}
 
 # I think this should be the same for training 1 agent and all agents?
 
-
 ##############################################################
 # EXECUTE
 # TODO: Entropy schedule?
@@ -105,7 +104,7 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity = UniformIntSampler(2, 2),
+                    capacity = UniformIntSampler(1, 3),
                     eta=UniformFloatSampler(eta, eta),
                     rollout=0
                 )    
@@ -123,7 +122,7 @@ if sys.argv[1] == "train":
 
         policies = {
             "prosumer_policy": (
-                TrainedPolicy, 
+                TrainedPolicy,
                 follower_agents
             ),
             "mediator_policy": ["CM"]
@@ -180,150 +179,19 @@ if sys.argv[1] == "train":
             "entropy_coeff": 0.00,
             "lambda": 0.96,
             "gamma": 0.99,
-            #"num_sgd_iter": 1000,
+            "num_sgd_iter": 100,
+            "train_batch_size": 4096,
+            "sgd_minibatch_size": 512
         },
         iterations=2000,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
         num_workers=1,
-        results_dir="~/ray_results/community_flex_balanceonly",
+        results_dir="~/ray_results/community_flex_balance_multi",
     )
 
-elif sys.argv[1] == "rollout":
-
-    agent_supertypes = {}
-    if setup_type == 'multi':
-        agent_supertypes.update(
-            {
-                f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity=UniformIntSampler(1, 4),
-                    eta=UniformFloatSampler(eta, eta)
-                )    
-                for i in range(1, 15)
-            }
-        )
-    
-    if setup_type == 'single':
-        agent_supertypes.update(
-            {
-                f"H1": StrategicProsumerAgent.Supertype( # 3 locked for this run
-                    capacity=1,
-                    eta=eta
-                )
-            }
-        )
-        capsample = UniformIntSampler(1, 4)
-        greedsample = UniformFloatSampler(0.5, 1.0)
-        agent_supertypes.update(
-            {
-                f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=capsample.sample(),
-                    greed=greedsample.sample(),
-                    eta=eta
-                )    
-                for i in range(2, 15)
-            }
-        )
-
-    if setup_type == 'single':
-        network.agents[f"H{no_agents}"].rotate = False
-
-    results = ph.utils.rllib.rollout(
-        directory="~/ray_results/community_market/LATEST",
-        env_class=ph.StackelbergEnv,
-        env_config={
-            'num_steps': NUM_EPISODE_STEPS,
-            'network': network,
-            'leader_agents': leader_agents,
-            'follower_agents': follower_agents,
-            'agent_supertypes': agent_supertypes,
-        },
-        num_repeats=1,
-        metrics=metrics,
-    )
-
-    results = list(results)
-
-    for rollout in results:
-        for aid in follower_agents:
-            aid = "H1"
-            agent_actions = []
-            agent_charge = []
-            agent_supply = []
-            agent_net_loss = []
-            invalid_actions = []
-            agent_actions += list(rollout.actions_for_agent(aid))
-            agent_charge += list(rollout.metrics[f"{aid}/current_charge"])
-            agent_supply += list(rollout.metrics[f"{aid}/current_supply"])
-            agent_prod = list(rollout.metrics[f"{aid}/current_prod"])
-            agent_load = list(rollout.metrics[f"{aid}/current_load"])
-            agent_net_loss += list(rollout.metrics[f"{aid}/net_loss"])
-            #invalid_actions += list(rollout.metrics[f"{aid}/acc_invalid_actions"])
-
-            # Remove None values from agent_actions
-            agent_actions = [action for action in agent_actions if action is not None]
-            # Plot distribution of agent action per step for all rollouts
-            folder = f"output/H1_3/"
-
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-
-            print(agent_actions)
-            plt.hist(agent_actions, bins=6)
-            plt.title("Distribution of action values")
-            plt.xlabel("Agent action")
-            plt.ylabel("Frequency")
-            plt.savefig(f"{folder}action_dist.png")
-            plt.close()
-
-            plt.plot(agent_net_loss, label='Net Loss')
-            plt.savefig(f"{folder}agent_net_loss.png")
-            plt.close()
-
-            plt.plot(agent_charge, label='battery charge')
-            plt.savefig(f"{folder}batterycharge.png")
-            plt.close()
-
-            plt.plot(invalid_actions, label='Invalid Actions')
-            plt.savefig(f"{folder}invalid_actions.png")
-            plt.close()
-
-            plt.plot(agent_prod, label='Production')
-            plt.savefig(f"{folder}production.png")
-            plt.close()
-
-            plt.plot(agent_load, label='Load')
-            plt.savefig(f"{folder}load.png")
-            plt.close()
-
-            plt.hist(agent_load, bins=20)
-            plt.savefig(f"{folder}load_dist.png")
-            plt.close()
-
-            plt.hist(agent_prod, bins=20)
-            plt.savefig(f"{folder}prod_dist.png")
-            plt.close()
-
-            plt.plot(agent_supply, label='Supply')
-            plt.savefig(f"{folder}supply.png")
-            plt.close()
-
-            plt.hist(agent_supply, bins=20)
-            plt.savefig(f"{folder}supply_dist.png")
-            plt.close()
-
-            # plt.figure(figsize=(12, 6))
-            # plt.plot(agent_actions, label='Action')
-            # plt.plot(agent_charge, label='Charge')
-            # plt.plot(agent_supply, label='Supply')
-            # plt.xlabel('Time Step')
-            # plt.ylabel('Value')
-            # plt.title(f'Agent {aid} Charge and Supply Over Time')
-            # plt.legend()
-            # plt.show()
-        
-
+# This is used for simple runs, fx debugging locked states.
 elif sys.argv[1] == "test":
     # Define agent supertypes
     agent_supertypes = {}

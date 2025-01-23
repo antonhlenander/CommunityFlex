@@ -9,6 +9,7 @@ from stackelberg_reward import StackelbergRewardDelayEnv
 from datamanager import DataManager
 from setup import Setup
 from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
+from trained_policy import TrainedPolicy
 
 from ray.rllib.examples.models.action_mask_model import TorchActionMaskModel
 from ray.rllib.models import ModelCatalog
@@ -146,6 +147,7 @@ if sys.argv[1] == "simple":
 elif sys.argv[1] == "rollout":
 
     agent_supertypes = {}
+    custom_policy_mapping = {}
 
     if setup_type == 'single':
         directory = "~/ray_results/community_market/LATEST/"
@@ -171,7 +173,8 @@ elif sys.argv[1] == "rollout":
         )
 
     if setup_type == 'multi':
-        directory = "~/ray_results/community_flex_twolevel_nobalance/LATEST"
+        directory = "~/ray_results/community_flex_balance_multi/LATEST"
+        #directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
@@ -179,23 +182,29 @@ elif sys.argv[1] == "rollout":
                     eta=eta,
                     rollout=1
                 )    
-                for i in range(1, 15)
+                for i in range(1, 6)
             }
         )
         agent_supertypes.update(
             {
                 "CM": StrategicCommunityMediator.Supertype(
                     cap_var=0.8,
-                    discount=0.8
+                    discount=0.8,
+                    rollout=1,
                 )    
+            }
+        )
+        custom_policy_mapping.update(
+            {
+                f"H{i}": TrainedPolicy for i in range(1, 6)
             }
         )
 
     if setup_type == 'simple':
         #directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/PPO_StackelbergRewardDelayEnv_2025-01-20_13-45-125p9bat23/"
         #directory = "~/ray_results/community_flex_balanceonly/LATEST/"
-        directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/good_0to15"
-        checkpoint = 876
+        directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
+        #checkpoint = 876
         agent_supertypes.update(
             {
                 f"H{i}": SimpleProsumerAgent.Supertype(
@@ -211,6 +220,7 @@ elif sys.argv[1] == "rollout":
                 "CM": StrategicCommunityMediator.Supertype(
                     cap_var=0.5,
                     discount=0.5,
+                    rollout=1,
                 )    
             }
         )
@@ -249,15 +259,16 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        explore=False,
+        explore=True,
         num_repeats=1,
         num_workers=1,
         metrics=metrics,
+        #custom_policy_mapping=custom_policy_mapping
     )
 
     results = list(results)
 
-    path = f"output/flex_balanceonly/"
+    path = f"output/flex_balance_twolevel/"
     if not os.path.exists(path):
         os.makedirs(path)
 
