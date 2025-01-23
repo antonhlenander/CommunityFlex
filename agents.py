@@ -96,7 +96,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             discount: float
             cap_var: float
 
-    def __init__(self, agent_id, dm, no_agents):
+    def __init__(self, agent_id, dm, no_agents, lagrange_mult, lagrange_lr):
         super().__init__(agent_id)
  
         # Store the DataManager to get historical price data
@@ -167,6 +167,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.acc_reward = 0
         self.reward = 0
 
+        # Lagrange multiplier and learning rate
+        self.lagrange_mult: float = lagrange_mult
+        self.lagrange_lr: float = lagrange_lr
+
         # Training stats
         self.different_prices = []
         self.no_different_prices = 0 
@@ -184,8 +188,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         self.prices = np.ndarray(50)
 
-        #self.action_space = gym.spaces.Discrete(50)
-        self.action_space = gym.spaces.Box(low=0.05, high=1, shape=(1,), dtype=np.float32)
+        self.action_space = gym.spaces.Discrete(50)
+        #self.action_space = gym.spaces.Box(low=0.05, high=1, shape=(1,), dtype=np.float32)
 
 
     def view(self, neighbour_id=None) -> ph.View:
@@ -226,7 +230,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
 
-        self.current_local_price = self.max_price * action[0]
+        #self.current_local_price = self.max_price * action[0]
+        self.current_local_price = self.prices[action]
         #self.action_plot.append(self.current_local_price)
 
         msgs = []
@@ -363,7 +368,6 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         hr_idx = sim_step % 24
         day = (sim_step // 24)
         month = day // 30
-        if step == 2: print(month)
 
         #print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR OBSERVATION ------------------")
         # DAILY COMPUTES AT END OF DAY AND AFTER RESET
@@ -491,67 +495,39 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     
 
     def compute_reward(self, ctx: ph.Context) -> float:
-        # Budget balance
-        # 1. Minimize cost
-        # 2. Balance income and cost        
-        # Compute amount of power above current capacity limitation
-        # Compute the budget balance - positive for profit, negative for loss
-
         step = ctx.env_view.current_step
         sim_step = (step + 1) // 2
         hour = ((sim_step-1) % 24) + 1
 
-        marginal_netloss = self.prev_mediator_netloss - self.mediator_netloss
+        marginal_netloss = self.mediator_netloss - self.prev_mediator_netloss
         self.prev_mediator_netloss = self.mediator_netloss
         normed_marginal_netloss = marginal_netloss / 60
-        np.clip(normed_marginal_netloss, -1, 1)
-        # print("mediator net loss: ", self.mediator_netloss)
-        # print("marginal net loss: ", marginal_netloss)
-       
-        self.max_reward = max(self.max_reward, abs(normed_marginal_netloss))
-        #print("max marginal: ", self.max_reward)
-        # time.sleep(0.1)
-        
+        #np.clip(normed_marginal_netloss, -1, 1)
+
+        # Compute the budget balance - positive for profit, negative for loss
         self.budget_balance = self.prosumers_netloss - self.mediator_netloss
         normed_budget_balance = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
         self.normed_balance = normed_budget_balance
     
-        x = normed_budget_balance
-        # self.balance_plot.append(x)
+        constraint_penalty = abs(normed_budget_balance)
 
+        #self.reward = -normed_marginal_netloss - self.lagrange_mult * constraint_penalty
+        self.reward = - constraint_penalty
 
-        # MORE SQUEEZED FUNCTON:
-        # lower_term = 0.025 + pow(x, 2)
-        # budget_signal = (0.05 / lower_term) - 1
-
-        lower_term = 0.1 + pow(x, 2)
-        budget_signal = (0.2 / lower_term) - 1
-
-        self.reward = 0.5*budget_signal + 0.5*normed_marginal_netloss
         self.acc_reward += self.reward
-  
-        # marginal_budget =  abs(self.prev_budget_balance) - abs(self.budget_balance)
-        # self.prev_budget_balance = self.budget_balance
-        # normed_marginal_change = marginal_budget / 40
 
-        #factor = pow(hour, 3) / pow(24, 3)
-        #self.reward = factor*budget_signal
-    
-        #print("REWARD: ", self.reward)
-        # if self.type.rollout == 0:
-        #     if step % 48 == 0:
-        #         fig, ax1 = plt.subplots()
-        #         ax2 = ax1.twinx()
-        #         ax1.plot(self.price_plot, 'r-')
-        #         ax1.plot(self.action_plot, 'g-')
-        #         ax1.set_ylim(0, self.max_price)
-        #         ax2.set_ylim(-1, 1)
-        #         ax2.plot(self.balance_plot, color='black')
-        #         plt.savefig("price_plot.png")
-        #         plt.close()
-        #         self.price_plot = []
-        #         self.action_plot = []
-        #         self.balance_plot = []
+        # print("------- Step: ", step)
+        # print("Constraint penalty: ", constraint_penalty)
+        # print("Lagrange multiplier: ", self.lagrange_mult)
+        #print(f"Reward: {self.reward}")
+        #time.sleep(0.5)
+
+        # TODO: Normalize final reward
+        if ctx.env_view.proportion_time_elapsed == 1:
+            #print("Step: ", step)
+            # Compute new lagrange multiplier
+            self.lagrange_mult = max(0, self.lagrange_mult + self.lagrange_lr * (constraint_penalty - 0.3))
+            #print(f"New lagrange multiplier: {self.lagrange_mult}")
 
         return self.reward
     
@@ -601,9 +577,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.displacement = random.randint(1, 7)
         self.squeeze = random.randint(1, 2)
         if self.type.rollout == 0:
-            #self.random_day = (random.randint(0, 363)*24)-1
+            self.random_day = max((random.randint(0, 363)*24)-1, 0)
             # Random month instead of random day
-            self.random_day = (random.randint(0, 10)*30*24)
+            #self.random_day = (random.randint(0, 10)*30*24)
         # PLOTTING
         # fig, ax1 = plt.subplots()
         # ax2 = ax1.twinx()
@@ -614,10 +590,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # ax2.plot(self.balance_plot, color='black')
         # plt.savefig("price_plot.png")
         # plt.close()
-        self.price_plot = []
-        self.action_plot = []
-        self.balance_plot = []
-        #print(self.prices)
+        # self.price_plot = []
+        # self.action_plot = []
+        # self.balance_plot = []
+
+
 
 
 ##############################################################
@@ -1414,8 +1391,8 @@ class SimpleProsumerAgent(ph.Agent):
     def reset(self):
         # Reset for type
         super().reset()
-        if self.type.rollout == 0:
-            print(f"Simple agent {self.id} sampled with cap: {self.type.capacity}, greed: {self.type.greed} & eta: {self.type.eta}")
+        # if self.type.rollout == 0:
+        #     print(f"Simple agent {self.id} sampled with cap: {self.type.capacity}, greed: {self.type.greed} & eta: {self.type.eta}")
         # Reset statistics
         self.acc_local_market_coin = 0.0
         self.acc_feedin_coin = 0.0

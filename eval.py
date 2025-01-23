@@ -27,7 +27,7 @@ no_agents = 5
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/eval/demandprofiles.csv', cap_path='data/eval/caps.csv')
-mediator = StrategicCommunityMediator('CM', dm=dm, no_agents=no_agents)
+mediator = StrategicCommunityMediator('CM', dm=dm, no_agents=no_agents, lagrange_mult=1, lagrange_lr=0.001)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -202,8 +202,8 @@ elif sys.argv[1] == "rollout":
 
     if setup_type == 'simple':
         #directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/PPO_StackelbergRewardDelayEnv_2025-01-20_13-45-125p9bat23/"
-        #directory = "~/ray_results/community_flex_balanceonly/LATEST/"
-        directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
+        directory = "~/ray_results/community_lagrange/LATEST/"
+        #directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
         #checkpoint = 876
         agent_supertypes.update(
             {
@@ -259,7 +259,7 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        explore=True,
+        explore=False,
         num_repeats=1,
         num_workers=1,
         metrics=metrics,
@@ -268,7 +268,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/flex_balance_twolevel/"
+    path = f"output/flex_lagrange/"
     if not os.path.exists(path):
         os.makedirs(path)
 
