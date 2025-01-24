@@ -206,7 +206,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         return gym.spaces.Dict(
             {
                 #"next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
-                "infos": gym.spaces.Box(low=0.0, high=1.0, shape=(16,), dtype=np.float32)
+                "infos": gym.spaces.Box(low= 0.0, high=1.0, shape=(16,), dtype=np.float32)
             }
         )
 
@@ -230,8 +230,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     def decode_action(self, ctx: ph.Context, action):
 
         #self.current_local_price = self.max_price * action[0]
+        # idx = int((self.current_grid_price / self.max_price)*50)-1
+        # self.current_local_price = self.prices[idx]
         self.current_local_price = self.prices[action]
-        #self.action_plot.append(self.current_local_price)
 
         msgs = []
         for agent in ctx.neighbour_ids:
@@ -530,7 +531,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # time.sleep(0.5)
 
         for key, value in observation.items():
-            observation[key] = np.clip(value, -1, 1)
+            #observation[key] = np.clip(value, -1, 1)
+            observation[key] = np.clip(value, 0, 1)
 
         return observation
     

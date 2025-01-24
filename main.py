@@ -215,7 +215,7 @@ elif sys.argv[1] == "test":
                 eta=UniformFloatSampler(eta, eta)
 
             )    
-            for i in range(1, 15)
+            for i in range(1, no_agents+1)
         },
     )
 

@@ -204,15 +204,15 @@ elif sys.argv[1] == "rollout":
     if setup_type == 'simple':
         #directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/PPO_StackelbergRewardDelayEnv_2025-01-20_13-45-125p9bat23/"
         #directory = "~/ray_results/community_lstm/good_balance_trained_on_year/"
-        directory = "~/ray_results/community_lstm/LATEST/"
+        directory = "~/ray_results/community_balance_wholeyear/good_balance_trained_on_year/"
         #directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
         #checkpoint = 876
         agent_supertypes.update(
             {
                 f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=0,
+                    capacity=2,
                     eta=eta,
-                    rollout=0
+                    rollout=1
                 )    
                 for i in range(1, no_agents+1)
             }
