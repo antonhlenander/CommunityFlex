@@ -173,7 +173,8 @@ elif sys.argv[1] == "rollout":
         )
 
     if setup_type == 'multi':
-        directory = "~/ray_results/community_flex_balance_multi/LATEST"
+        #directory = "~/ray_results/community_flex_balance_multi/LATEST"
+        directory = "~/ray_results/community_lstm/good_balance_trained_on_year/"
         #directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
         agent_supertypes.update(
             {
@@ -182,7 +183,7 @@ elif sys.argv[1] == "rollout":
                     eta=eta,
                     rollout=1
                 )    
-                for i in range(1, 6)
+                for i in range(1, no_agents+1)
             }
         )
         agent_supertypes.update(
@@ -196,13 +197,14 @@ elif sys.argv[1] == "rollout":
         )
         custom_policy_mapping.update(
             {
-                f"H{i}": TrainedPolicy for i in range(1, 6)
+                f"H{i}": TrainedPolicy for i in range(1, no_agents+1)
             }
         )
 
     if setup_type == 'simple':
         #directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/PPO_StackelbergRewardDelayEnv_2025-01-20_13-45-125p9bat23/"
-        directory = "~/ray_results/community_lagrange/LATEST/"
+        #directory = "~/ray_results/community_lstm/good_balance_trained_on_year/"
+        directory = "~/ray_results/community_lstm/LATEST/"
         #directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
         #checkpoint = 876
         agent_supertypes.update(
@@ -212,7 +214,7 @@ elif sys.argv[1] == "rollout":
                     eta=eta,
                     rollout=0
                 )    
-                for i in range(1, 6)
+                for i in range(1, no_agents+1)
             }
         )
         agent_supertypes.update(
@@ -263,12 +265,12 @@ elif sys.argv[1] == "rollout":
         num_repeats=1,
         num_workers=1,
         metrics=metrics,
-        #custom_policy_mapping=custom_policy_mapping
+        custom_policy_mapping=custom_policy_mapping
     )
 
     results = list(results)
 
-    path = f"output/flex_lagrange/"
+    path = f"output/flex_lstm/"
     if not os.path.exists(path):
         os.makedirs(path)
 

@@ -158,16 +158,22 @@ class StackelbergRewardDelayEnv(PhantomEnv):
 
             ctx = self._ctxs[aid]
 
+            # CHANGED LOGIC!
+            # Computing rewards before observations, such that observations can have resets for next day
+            # Furthermore computing all rewards for both leader and follower at the follower step,
+            # such that the leader sees its reward from the follower actions.
+            if evenstep:
+                self._rewards[aid] = ctx.agent.compute_reward(ctx)
+            # if aid in acting_agents:
+            #     self._rewards[aid] = ctx.agent.compute_reward(ctx)
+
             if aid in next_acting_agents:
                 obs = ctx.agent.encode_observation(ctx)
                 if obs is not None:
                     observations[aid] = obs
                     infos[aid] = ctx.agent.collect_infos(ctx)
 
-            if evenstep:
-                self._rewards[aid] = ctx.agent.compute_reward(ctx)
-            # if aid in acting_agents:
-            #     self._rewards[aid] = ctx.agent.compute_reward(ctx)
+
 
             terminations[aid] = ctx.agent.is_terminated(ctx)
             truncations[aid] = ctx.agent.is_truncated(ctx)

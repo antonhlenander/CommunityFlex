@@ -23,7 +23,7 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 48
+NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
@@ -140,6 +140,14 @@ if sys.argv[1] == "train":
                 for i in range(1, no_agents+1)
             }
         )
+        agent_supertypes.update(
+            {
+                f"CM": StrategicCommunityMediator.Supertype(
+                    discount=0.8,
+                    cap_var=0.8
+                )    
+            }
+        )
 
         policies = {"mediator_policy": ["CM"]}
 
@@ -175,21 +183,24 @@ if sys.argv[1] == "train":
             'agent_supertypes': agent_supertypes,
         },
         rllib_config={
-            "model": {"custom_model": "torch_action_mask_model"},
-            "lr": 0.00001,
+            #"model": {"use_lstm": True},
+            "lr": 0.0001,
             "entropy_coeff": 0.1,
-            "lambda": 0.96,
-            "gamma": 0.99,
-            #"num_sgd_iter": 100,
-            #"train_batch_size": 4096,
-            #"sgd_minibatch_size": 512
+            "lambda": 0.98,
+            "gamma": 0.998,
+            "grad_clip": 10,
+            "value_loss_coeff": 0.05,
+            "rollout_fragment_length": 48,
+            "num_sgd_iter": 100,
+            "train_batch_size": 4000*2,
+            "sgd_minibatch_size": 1000*2,
         },
-        iterations=2000,
+        iterations=100,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=1,
-        results_dir="~/ray_results/community_lagrange",
+        num_workers=4,
+        results_dir="~/ray_results/community_balance_wholeyear",
     )
 
 # This is used for simple runs, fx debugging locked states.

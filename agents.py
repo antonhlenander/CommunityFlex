@@ -223,9 +223,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.acc_total_interactions = 0
         self.current_total_import = 0
         self.current_total_export = 0
-        # self.prosumers_netloss = 0
-        # self.mediator_netloss = 0
-        # self.budget_balance = 0
+
+
 
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
@@ -361,6 +360,43 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             #self.mediator_netloss += self.penalty
             #self.alltime_mediator_payments += self.penalty
 
+    def compute_reward(self, ctx: ph.Context) -> float:
+        step = ctx.env_view.current_step
+        sim_step = (step + 1) // 2
+        hour = ((sim_step-1) % 24) + 1
+
+        marginal_netloss = self.mediator_netloss - self.prev_mediator_netloss
+        self.prev_mediator_netloss = self.mediator_netloss
+        normed_marginal_netloss = marginal_netloss / 60
+        #np.clip(normed_marginal_netloss, -1, 1)
+
+        # Compute the budget balance - positive for profit, negative for loss
+        self.budget_balance = self.prosumers_netloss - self.mediator_netloss
+        normed_budget_balance = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
+        self.normed_balance = normed_budget_balance
+    
+        constraint_penalty = abs(normed_budget_balance)
+
+        #self.reward = -normed_marginal_netloss - self.lagrange_mult * constraint_penalty
+        self.reward = - constraint_penalty
+
+        self.acc_reward += self.reward
+
+        # print("------- Step: ", step)
+        # print("Constraint penalty: ", constraint_penalty)
+        # print("Lagrange multiplier: ", self.lagrange_mult)
+        #print(f"Reward: {self.reward}")
+        #time.sleep(0.5)
+
+        # TODO: Normalize final reward
+        # if ctx.env_view.proportion_time_elapsed == 1:
+        #     #print("Step: ", step)
+        #     # Compute new lagrange multiplier
+        #     self.lagrange_mult = max(0, self.lagrange_mult + self.lagrange_lr * (constraint_penalty - 0.3))
+        #     #print(f"New lagrange multiplier: {self.lagrange_mult}")
+
+        return self.reward
+
     def encode_observation(self, ctx: ph.Context):
         step = ctx.env_view.current_step
         sim_step = (step + 1) // 2  + min(self.random_day, 8735)
@@ -373,11 +409,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # DAILY COMPUTES AT END OF DAY AND AFTER RESET
         # Computations at even step for CM to observe at beginning of the next day
         ###############################################################
+
         if step == 0:
             self.yearly_cap_limits = self.dso.compute_yearly_capacity_limits(self.type.cap_var, ctx)
             # Extends yearly_cap_limits such that we dont get out of bounds error
             self.yearly_cap_limits.extend([10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10])
-            views = ctx.agent_views.items()
+            #views = ctx.agent_views.items()
             # for key, view in views:
             #     self.current_total_supply += view.supply
             #     self.acc_total_interactions += view.interactions
@@ -386,22 +423,26 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.current_cap_limit = self.yearly_cap_limits[hr_idx]
             next_cap_limits = self.yearly_cap_limits[sim_step:sim_step+12]
             #self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
-            a = 0.45 * (1.1 + np.sin((2 * np.pi * (sim_step) / 17280 / self.squeeze)+self.displacement))
-            upper_sin = 0.4 * a * (2.2 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
-            lower_sin = 0.4 * a * (1.1 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
-            upper = self.prices[min(int(upper_sin*39), 39)]
-            lower = self.prices[min(int(lower_sin*39), 39)]
-            daily = ((lower+upper)/2) + ((upper-lower)/2) * np.sin((2*np.pi*(sim_step) / 24))
+            # a = 0.45 * (1.1 + np.sin((2 * np.pi * (sim_step) / 17280 / self.squeeze)+self.displacement))
+            # upper_sin = 0.4 * a * (2.2 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
+            # lower_sin = 0.4 * a * (1.1 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
+            # upper = self.prices[min(int(upper_sin*39), 39)]
+            # lower = self.prices[min(int(lower_sin*39), 39)]
+            # daily = ((lower+upper)/2) + ((upper-lower)/2) * np.sin((2*np.pi*(sim_step) / 24))
             #self.price_plot.append(daily)
             #self.current_grid_price = daily
             self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
             #self.price_plot.append(self.current_grid_price)
             self.feedin_price = self.current_grid_price - self.dso.export_tariff
             self.current_local_tariff = self.dso.import_tariffs_winter[hr_idx]*(1-self.type.discount)
-
             #print(f"DAILY RESIDUAL DEMAND: {self.next_residual_demand}")
             #print(f"NEXT CAP LIMITS: {next_cap_limits}")
             #print(f"SUM OF CAP LIMITS: {np.sum(next_cap_limits)}")
+
+        if step % 48 == 0:
+            if self.type.rollout == 0:
+                self.mediator_netloss = 0
+                self.prosumers_netloss = 0
         
         #print(f"CURRENT LOCAL PRICE: {self.current_local_price}")
         #print(f"CURRENT GRID PRICE: {self.current_grid_price}")
@@ -494,42 +535,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         return observation
     
 
-    def compute_reward(self, ctx: ph.Context) -> float:
-        step = ctx.env_view.current_step
-        sim_step = (step + 1) // 2
-        hour = ((sim_step-1) % 24) + 1
 
-        marginal_netloss = self.mediator_netloss - self.prev_mediator_netloss
-        self.prev_mediator_netloss = self.mediator_netloss
-        normed_marginal_netloss = marginal_netloss / 60
-        #np.clip(normed_marginal_netloss, -1, 1)
-
-        # Compute the budget balance - positive for profit, negative for loss
-        self.budget_balance = self.prosumers_netloss - self.mediator_netloss
-        normed_budget_balance = self.budget_balance / (self.mediator_netloss+self.prosumers_netloss+0.000001)
-        self.normed_balance = normed_budget_balance
-    
-        constraint_penalty = abs(normed_budget_balance)
-
-        #self.reward = -normed_marginal_netloss - self.lagrange_mult * constraint_penalty
-        self.reward = - constraint_penalty
-
-        self.acc_reward += self.reward
-
-        # print("------- Step: ", step)
-        # print("Constraint penalty: ", constraint_penalty)
-        # print("Lagrange multiplier: ", self.lagrange_mult)
-        #print(f"Reward: {self.reward}")
-        #time.sleep(0.5)
-
-        # TODO: Normalize final reward
-        if ctx.env_view.proportion_time_elapsed == 1:
-            #print("Step: ", step)
-            # Compute new lagrange multiplier
-            self.lagrange_mult = max(0, self.lagrange_mult + self.lagrange_lr * (constraint_penalty - 0.3))
-            #print(f"New lagrange multiplier: {self.lagrange_mult}")
-
-        return self.reward
     
     
     def reset(self):
@@ -572,12 +578,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # TODO: Let's see what happens if max price is doubled
         self.max_price = self.max_price * 2
         self.prices = np.linspace(0.1, self.max_price, num=50)
-        random.seed(time.time())
-        self.cycles = random.randint(4, 11)
-        self.displacement = random.randint(1, 7)
-        self.squeeze = random.randint(1, 2)
-        if self.type.rollout == 0:
-            self.random_day = max((random.randint(0, 363)*24)-1, 0)
+        # random.seed(time.time())
+        # self.cycles = random.randint(4, 11)
+        # self.displacement = random.randint(1, 7)
+        # self.squeeze = random.randint(1, 2)
+        #if self.type.rollout == 0:
+            #self.random_day = max((random.randint(0, 363)*24)-1, 0)
             # Random month instead of random day
             #self.random_day = (random.randint(0, 10)*30*24)
         # PLOTTING
