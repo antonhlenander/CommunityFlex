@@ -174,14 +174,14 @@ elif sys.argv[1] == "rollout":
 
     if setup_type == 'multi':
         #directory = "~/ray_results/community_flex_balance_multi/LATEST"
-        directory = "~/ray_results/community_lstm/good_balance_trained_on_year/"
+        directory = "~/ray_results/param_search/config0/LATEST"
         #directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    #capacity=2,
+                    capacity=3,
                     eta=eta,
-                    rollout=1
+                    rollout=0
                 )    
                 for i in range(1, no_agents+1)
             }
@@ -251,7 +251,7 @@ elif sys.argv[1] == "rollout":
 
 
     results = ph.utils.rllib.rollout(
-        directory=directory,
+        directory="~/ray_results/param_search/config0/LATEST",
         #checkpoint=checkpoint,
         env_class=StackelbergRewardDelayEnv,
         env_config={
@@ -270,7 +270,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/flex_lstm/"
+    path = f"output/flex_balance_multi/"
     if not os.path.exists(path):
         os.makedirs(path)
 

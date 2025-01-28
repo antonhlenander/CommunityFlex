@@ -97,6 +97,7 @@ infos = {}
 ##############################################################
 # EXECUTE
 # TODO: Entropy schedule?
+# TODO: LR schedule?
 ##############################################################
 
 if sys.argv[1] == "train":
@@ -105,7 +106,8 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity = UniformIntSampler(1, 3),
+                    #capacity = UniformIntSampler(1, 1),
+                    capacity = 1,
                     eta=UniformFloatSampler(eta, eta),
                     rollout=0
                 )    
@@ -184,23 +186,23 @@ if sys.argv[1] == "train":
         },
         rllib_config={
             #"model": {"use_lstm": True},
-            "lr": 0.0001,
-            "entropy_coeff": 0.1,
-            "lambda": 0.98,
-            "gamma": 0.998,
-            "grad_clip": 10,
-            "value_loss_coeff": 0.05,
-            "rollout_fragment_length": 48,
+            "lr": 0.0003,
+            "entropy_coeff": 0.01,
+            "lambda": 0.9,
+            "gamma": 0.85,
+            "grad_clip": 7.6,
+            "value_loss_coeff": 0.24,
+            "rollout_fragment_length": 48*5,
             "num_sgd_iter": 100,
             "train_batch_size": 4000*2,
             "sgd_minibatch_size": 1000*2,
         },
-        iterations=100,
-        checkpoint_freq=1,
+        iterations=5,
+        #checkpoint_freq=0,
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir="~/ray_results/community_balance_wholeyear",
+        results_dir="~/ray_results/community_multi_combined",
     )
 
 # This is used for simple runs, fx debugging locked states.
