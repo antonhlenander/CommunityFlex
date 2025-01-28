@@ -165,7 +165,9 @@ if sys.argv[1] == "train":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=0.5,
-                    cap_var=1
+                    cap_var=1,
+                    dso_penalty=75,
+                    # range for langrange multiplier to update through training?
                 )    
             }
         )
@@ -205,7 +207,7 @@ if sys.argv[1] == "train":
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=1,
+        num_workers=4,
         results_dir="~/ray_results/community_multi_combined",
     )
 
