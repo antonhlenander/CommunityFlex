@@ -210,7 +210,7 @@ elif sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=2,
+                    capacity=1,
                     eta=eta,
                     rollout=1
                 )    
@@ -251,8 +251,8 @@ elif sys.argv[1] == "rollout":
 
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/param_search/config0/LATEST",
-        #checkpoint=checkpoint,
+        directory="~/ray_results/community_multi_combined/train1/",
+        checkpoint=164,
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
@@ -270,7 +270,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/flex_balance_multi/"
+    path = f"output/flex_multi_combined/"
     if not os.path.exists(path):
         os.makedirs(path)
 

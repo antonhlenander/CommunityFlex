@@ -32,7 +32,7 @@ discount = 0.5 # possibly supertype?
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
-mediator = StrategicCommunityMediator('CM', dm=dm, no_agents=no_agents, lagrange_mult=1, lagrange_lr=0.001)
+mediator = StrategicCommunityMediator('CM', dm=dm, no_agents=no_agents, lagrange_mult=0.5, lagrange_lr=0.001)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -197,8 +197,8 @@ if sys.argv[1] == "train":
             "train_batch_size": 4000*2,
             "sgd_minibatch_size": 1000*2,
         },
-        iterations=5,
-        #checkpoint_freq=0,
+        iterations=300,
+        checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
         num_workers=4,
