@@ -25,6 +25,9 @@ class DataManager:
         prod_profile = self.prod_df[aid].iloc[step:step+24].sum()
         return prod_profile
     
+    def get_agent_summed_demand(self, aid):
+        return self.demand_df[aid].sum()
+
     def get_all_daily_demand(self):
         return self.demand_df.sum().sum()
     

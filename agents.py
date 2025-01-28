@@ -31,7 +31,7 @@ class DSO():
         self.residual_demand: float = 0
         # Update for every day
         self.daily_prices: list = []
-        self.all_daily_demand: list = self.dm.get_all_daily_demand()
+        self.total_daily_demand: int = 0
         self.all_daily_prod: list = []
 
         self.price_array = self.dm.get_price_array()
@@ -40,6 +40,12 @@ class DSO():
         self.import_tariffs_winter = [0.2296,0.2296,0.2296,0.2296,0.2296,0.2296,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,2.0666,2.0666,2.0666,2.0666,0.6889,0.6889,0.6889]
         self.import_tariffs_summer = [0.2296,0.2296,0.2296,0.2296,0.2296,0.2296,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.3444,0.8955,0.8955,0.8955,0.8955,0.3444,0.3444,0.3444]
         self.export_tariff = 0.00375 + 0.000875 + 0.01
+
+    def agents_init(self, ctx: ph.Context):
+        self.total_daily_demand = 0
+        views = ctx.agent_views.items()
+        for aid, view in views:
+            self.total_daily_demand += self.dm.get_agent_summed_demand(aid)
     
     def compute_yearly_capacity_limits(self, var, ctx: ph.Context):
         yearly_cap_limits = []
@@ -57,7 +63,7 @@ class DSO():
             base_prod = self.dm.get_agent_daily_prod(aid, step)
             total_prod += base_prod*view.capacity
         # Compute the residual demand
-        residual_demand = self.all_daily_demand - total_prod
+        residual_demand = self.total_daily_demand - total_prod
         self.residual_demand = max(residual_demand, 0)
         return residual_demand
     
@@ -71,6 +77,7 @@ class DSO():
         mid_price = (max_price + min_price)/2
         avg_cap = self.residual_demand/24
         capacity_limitation = avg_cap - var * avg_cap * 2 * (daily_prices - mid_price) / (max_price - min_price)
+
         return capacity_limitation
         
         # The production has to be computed from each agent because of the random capacities.
@@ -87,14 +94,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         discount: float = 0.5
         cap_var: float = 0.5
         rollout: int = 0
+        dso_penalty: int = 75
 
     @dataclass(frozen=True)
     class MediatorView(ph.AgentView):
-            current_grid_price: float
-            current_local_price: float
-            current_feedin_price: float
-            discount: float
-            cap_var: float
+        current_grid_price: float
+        current_local_price: float
+        current_feedin_price: float
+        discount: float
+        cap_var: float
 
     def __init__(self, agent_id, dm, no_agents, lagrange_mult, lagrange_lr):
         super().__init__(agent_id)
@@ -227,8 +235,6 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.acc_total_interactions = 0
         self.current_total_import = 0
         self.current_total_export = 0
-
-
 
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
@@ -364,10 +370,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                     
         if step % 2 == 0:
             self.penalized_amount = max(self.current_total_import - self.current_cap_limit, 0)
-            self.penalty = self.penalized_amount*75
+            self.penalty = self.penalized_amount*self.type.dso_penalty
             self.capacity_balance = self.current_total_import - self.current_cap_limit
-            #self.mediator_netloss += self.penalty
-            #self.alltime_mediator_payments += self.penalty
+            self.mediator_netloss += self.penalty
+            self.alltime_mediator_payments += self.penalty
 
     def compute_reward(self, ctx: ph.Context) -> float:
         step = ctx.env_view.current_step
@@ -378,7 +384,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         
         marginal_netloss = self.mediator_netloss - self.prev_mediator_netloss
         self.prev_mediator_netloss = self.mediator_netloss
-        normed_marginal_netloss = marginal_netloss / 60
+        normed_marginal_netloss = marginal_netloss / 150
+        self.max_reward = max(self.max_reward, normed_marginal_netloss)
+        self.min_reward = min(self.min_reward, normed_marginal_netloss)
         np.clip(normed_marginal_netloss, -1, 1)
 
         # Compute the budget balance - positive for profit, negative for loss
@@ -417,6 +425,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         ###############################################################
 
         if step == 0:
+            self.dso.agents_init(ctx)
             self.yearly_cap_limits = self.dso.compute_yearly_capacity_limits(self.type.cap_var, ctx)
             # Extends yearly_cap_limits such that we dont get out of bounds error
             self.yearly_cap_limits.extend([10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10])
@@ -499,45 +508,40 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # print(f"Marginal net loss: {marginal_netloss}")
 
         observation = {
-            "next_cap_limits": np.divide
-                (
-                    next_cap_limits,
-                    self.all_max_daily_demand, 
-                    dtype=np.float32
-                ),
-            "infos": np.array(
-                [
-                    hr_idx / 24,
-                    month / 12,
-                    prev_price / max_price,
-                    self.current_local_price / max_price,
-                    self.feedin_price / max_price,
-                    self.current_grid_price / max_price,
-                    self.budget_balance / 50000, # this observation can go negative
-                    normed_budget_balance, # this observation can go negative
-                    #self.current_total_supply / self.all_max_daily_demand,
-                    self.current_total_prod / self.all_max_daily_demand,
-                    self.current_total_load / self.all_max_daily_demand,
-                    self.current_total_import / self.all_max_daily_demand,
-                    self.current_total_export / self.all_max_daily_demand,
-                    self.penalized_amount / self.all_max_daily_demand,
-                    prev_cap_limit / self.all_max_daily_demand,
-                    self.current_cap_limit / self.all_max_daily_demand,
-                    self.prosumers_netloss / 50000, # this observation can go negative
-                    self.mediator_netloss / 50000, # this observation can go negative
-                    #self.alltime_mediator_payments / 400000,
-                    #self.alltime_mediator_income / 400000,
-                    #self.prosumers_netloss / 400000,
-                    # abs(min(normed_budget_balance, 0)),
-                    # max(normed_budget_balance, 0),
-                ],
-                dtype=np.float32
-                )
+            "next_cap_limits": np.clip(
+                    np.divide(
+                        next_cap_limits,
+                        self.all_max_daily_demand, 
+                        dtype=np.float32), 0, 1),
+            "infos": np.clip(
+                np.array(
+                    [
+                        hr_idx / 24,
+                        month / 12,
+                        prev_price / max_price,
+                        self.current_local_price / max_price,
+                        self.feedin_price / max_price,
+                        self.current_grid_price / max_price,
+                        self.budget_balance / 50000, # this observation can go negative
+                        normed_budget_balance, # this observation can go negative
+                        #self.current_total_supply / self.all_max_daily_demand,
+                        self.current_total_prod / self.all_max_daily_demand,
+                        self.current_total_load / self.all_max_daily_demand,
+                        self.current_total_import / self.all_max_daily_demand,
+                        self.current_total_export / self.all_max_daily_demand,
+                        self.penalized_amount / self.all_max_daily_demand,
+                        prev_cap_limit / self.all_max_daily_demand,
+                        self.current_cap_limit / self.all_max_daily_demand,
+                        self.prosumers_netloss / 50000, # this observation can go negative
+                        self.mediator_netloss / 50000, # this observation can go negative
+                        #self.alltime_mediator_payments / 400000,
+                        #self.alltime_mediator_income / 400000,
+                        #self.prosumers_netloss / 400000,
+                        # abs(min(normed_budget_balance, 0)),
+                        # max(normed_budget_balance, 0),
+                    ],
+                    dtype=np.float32), -1, 1)
             }
-
-        for key, value in observation.items():
-            observation[key] = np.clip(value, -1, 1)
-            #observation[key] = np.clip(value, 0, 1)
 
         return observation
     

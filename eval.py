@@ -179,7 +179,7 @@ elif sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity=3,
+                    capacity=1,
                     eta=eta,
                     rollout=0
                 )    
@@ -189,7 +189,7 @@ elif sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 "CM": StrategicCommunityMediator.Supertype(
-                    cap_var=0.8,
+                    cap_var=0.0,
                     discount=0.8,
                     rollout=1,
                 )    
@@ -198,54 +198,6 @@ elif sys.argv[1] == "rollout":
         custom_policy_mapping.update(
             {
                 f"H{i}": TrainedPolicy for i in range(1, no_agents+1)
-            }
-        )
-
-    if setup_type == 'simple':
-        #directory = "/Users/antonlenander/ray_results/community_flex_balanceonly/PPO_StackelbergRewardDelayEnv_2025-01-20_13-45-125p9bat23/"
-        #directory = "~/ray_results/community_lstm/good_balance_trained_on_year/"
-        directory = "~/ray_results/community_balance_wholeyear/good_balance_trained_on_year/"
-        #directory = "/Users/antonlenander/ray_results/community_flex_balance2/entropy0_onlynetlossobservation"
-        #checkpoint = 876
-        agent_supertypes.update(
-            {
-                f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=1,
-                    eta=eta,
-                    rollout=1
-                )    
-                for i in range(1, no_agents+1)
-            }
-        )
-        agent_supertypes.update(
-            {
-                "CM": StrategicCommunityMediator.Supertype(
-                    cap_var=0.5,
-                    discount=0.5,
-                    rollout=1,
-                )    
-            }
-        )
-
-    if setup_type == 'multsing':
-        directory = "~/ray_results/community_flex_singlepolicy/LATEST/"
-        agent_supertypes.update(
-            {
-                f"H{i}": StrategicProsumerAgent.Supertype(
-                    #capacity=2,
-                    eta=eta,
-                    rollout=1
-                )    
-                for i in range(1, 15)
-            }
-        )
-        agent_supertypes.update(
-            {
-                "CM": SimpleCommunityMediator.Supertype(
-                    #cap_var=0.5,
-                    #discount=0.5
-                    std_dev=0
-                )    
             }
         )
 
@@ -261,7 +213,7 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        explore=False,
+        explore=True,
         num_repeats=1,
         num_workers=1,
         metrics=metrics,

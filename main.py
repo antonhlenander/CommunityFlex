@@ -67,6 +67,8 @@ metrics["CM/prosumers_netloss"] = ph.metrics.SimpleAgentMetric("CM", "prosumers_
 metrics["CM/prosumers_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_prosumers_payments")
 metrics["CM/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
 metrics["CM/lagrange_mult"] = ph.metrics.SimpleAgentMetric("CM", "lagrange_mult")
+metrics["CM/max_reward"] = ph.metrics.SimpleAgentMetric("CM", "max_reward")
+metrics["CM/min_reward"] = ph.metrics.SimpleAgentMetric("CM", "min_reward")
 
 for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
@@ -102,34 +104,6 @@ infos = {}
 
 if sys.argv[1] == "train":
     agent_supertypes = {}
-    if setup_type == 'multi':
-        agent_supertypes.update(
-            {
-                f"H{i}": StrategicProsumerAgent.Supertype(
-                    #capacity = UniformIntSampler(1, 1),
-                    capacity = 1,
-                    eta=UniformFloatSampler(eta, eta),
-                    rollout=0
-                )    
-                for i in range(1, no_agents+1)
-            }
-        )
-        agent_supertypes.update(
-            {
-                f"CM": StrategicCommunityMediator.Supertype(
-                    discount=0.8,
-                    cap_var=0.8
-                )    
-            }
-        )
-
-        policies = {
-            "prosumer_policy": (
-                TrainedPolicy,
-                follower_agents
-            ),
-            "mediator_policy": ["CM"]
-        }
     
     if setup_type == 'simple':
         agent_supertypes.update(
@@ -174,6 +148,36 @@ if sys.argv[1] == "train":
         )
         policies = {"prosumer_policy": follower_agents}
 
+
+    if setup_type == 'multi':
+        agent_supertypes.update(
+            {
+                f"H{i}": StrategicProsumerAgent.Supertype(
+                    #capacity = UniformIntSampler(1, 1),
+                    capacity = 1,
+                    eta=UniformFloatSampler(eta, eta),
+                    rollout=0
+                )    
+                for i in range(1, no_agents+1)
+            }
+        )
+        agent_supertypes.update(
+            {
+                f"CM": StrategicCommunityMediator.Supertype(
+                    discount=0.5,
+                    cap_var=1
+                )    
+            }
+        )
+
+        policies = {
+            "prosumer_policy": (
+                TrainedPolicy,
+                follower_agents
+            ),
+            "mediator_policy": ["CM"]
+        }
+
     ph.utils.rllib.train(
         algorithm="PPO",
         env_class=StackelbergRewardDelayEnv,
@@ -201,7 +205,7 @@ if sys.argv[1] == "train":
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=4,
+        num_workers=1,
         results_dir="~/ray_results/community_multi_combined",
     )
 

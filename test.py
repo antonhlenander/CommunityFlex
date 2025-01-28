@@ -5,9 +5,13 @@ import matplotlib.pyplot as plt
 
 residual_demand = 25
 daily_prices = [1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5, 4, 3, 2, 1, 2, 3, 4, 5, 4, 3, 2]
-var = 1
+var = 0.8
 
 daily_residual_demand = [5,5,5,5,5]
+
+dm = DataManager()
+
+total_demand = dm.get_agent_summed_demand("H2")
 
 
 
