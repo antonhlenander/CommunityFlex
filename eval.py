@@ -190,7 +190,7 @@ elif sys.argv[1] == "rollout":
             {
                 "CM": StrategicCommunityMediator.Supertype(
                     cap_var=1,
-                    discount=0,
+                    discount=0.5,
                     rollout=1,
                     lagrange_mult=0,
                     lagrange_lr=0
@@ -205,7 +205,7 @@ elif sys.argv[1] == "rollout":
 
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/community_multi_combined/LATEST/",
+        directory="~/ray_results/community_multi_combined_training/LATEST/",
         #checkpoint=164,
         env_class=StackelbergRewardDelayEnv,
         env_config={
@@ -219,7 +219,7 @@ elif sys.argv[1] == "rollout":
         num_repeats=1,
         num_workers=1,
         metrics=metrics,
-        custom_policy_mapping=custom_policy_mapping
+        #custom_policy_mapping=custom_policy_mapping
     )
 
     results = list(results)

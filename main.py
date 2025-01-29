@@ -150,6 +150,7 @@ if sys.argv[1] == "train":
 
 
     if setup_type == 'multi':
+        rollout_length=5
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
@@ -168,7 +169,8 @@ if sys.argv[1] == "train":
                     cap_var=1,
                     dso_penalty=75,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
-                    lagrange_lr=0
+                    lagrange_lr=0,
+                    rollout_length=rollout_length,
                     # range for langrange multiplier to update through training?
                 )    
             }
@@ -179,6 +181,7 @@ if sys.argv[1] == "train":
                 TrainedPolicy,
                 follower_agents
             ),
+            "prosumer_policy": follower_agents,
             "mediator_policy": ["CM"]
         }
 
@@ -200,7 +203,7 @@ if sys.argv[1] == "train":
             "gamma": 0.85,
             "grad_clip": 7.6,
             "value_loss_coeff": 0.24,
-            "rollout_fragment_length": 48*5,
+            "rollout_fragment_length": 48*rollout_length,
             "num_sgd_iter": 100,
             "train_batch_size": 4000*2,
             "sgd_minibatch_size": 1000*2,
@@ -209,8 +212,8 @@ if sys.argv[1] == "train":
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=1,
-        results_dir="~/ray_results/community_multi_combined",
+        num_workers=4,
+        results_dir="~/ray_results/community_multi_combined_training",
     )
 
 # This is used for simple runs, fx debugging locked states.

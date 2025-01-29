@@ -97,6 +97,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         dso_penalty: int = 75
         lagrange_mult: float = 0.5
         lagrange_lr: float = 0.001
+        rollout_length: int = 1
         #no_agents: int = 0
 
     @dataclass(frozen=True)
@@ -239,6 +240,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
+        
+        # if self.current_cap_limit < 2:
+        #     self.current_local_price = self.prices[49]
+
+        # if self.current_cap_limit > 2 and self.current_cap_limit < 3:
+        #     self.current_local_price = self.prices[0]
+        
+        # if self.current_cap_limit > 4:
+        #     self.current_local_price = self.prices[0]
 
         self.current_local_price = self.prices[action]
 
@@ -462,7 +472,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             #print(f"NEXT CAP LIMITS: {next_cap_limits}")
             #print(f"SUM OF CAP LIMITS: {np.sum(next_cap_limits)}")
 
-        if step % 48*7 == 0:
+        if step % 48*self.type.rollout_length == 0:
             if self.type.rollout == 0:
                 self.mediator_netloss = 0
                 self.prosumers_netloss = 0
