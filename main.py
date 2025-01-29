@@ -28,11 +28,10 @@ eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
 no_agents = 5
-discount = 0.5 # possibly supertype?
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
-mediator = StrategicCommunityMediator('CM', dm=dm, no_agents=no_agents, lagrange_mult=0.5, lagrange_lr=0.001)
+mediator = StrategicCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -66,9 +65,10 @@ metrics["CM/mediator_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_me
 metrics["CM/prosumers_netloss"] = ph.metrics.SimpleAgentMetric("CM", "prosumers_netloss")
 metrics["CM/prosumers_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_prosumers_payments")
 metrics["CM/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
-metrics["CM/lagrange_mult"] = ph.metrics.SimpleAgentMetric("CM", "lagrange_mult")
 metrics["CM/max_reward"] = ph.metrics.SimpleAgentMetric("CM", "max_reward")
 metrics["CM/min_reward"] = ph.metrics.SimpleAgentMetric("CM", "min_reward")
+metrics["CM/max_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "max_marg_netloss")
+metrics["CM/min_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "min_marg_netloss")
 
 for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
@@ -164,9 +164,11 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"CM": StrategicCommunityMediator.Supertype(
-                    discount=0.5,
+                    discount=1,
                     cap_var=1,
                     dso_penalty=75,
+                    lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
+                    lagrange_lr=0
                     # range for langrange multiplier to update through training?
                 )    
             }
@@ -192,8 +194,8 @@ if sys.argv[1] == "train":
         },
         rllib_config={
             #"model": {"use_lstm": True},
-            "lr": 0.0003,
-            "entropy_coeff": 0.01,
+            "lr": 0.0001,
+            "entropy_coeff": 0.05,
             "lambda": 0.9,
             "gamma": 0.85,
             "grad_clip": 7.6,
@@ -207,7 +209,7 @@ if sys.argv[1] == "train":
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=4,
+        num_workers=1,
         results_dir="~/ray_results/community_multi_combined",
     )
 

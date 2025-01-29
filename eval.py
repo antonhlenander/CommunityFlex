@@ -27,7 +27,7 @@ no_agents = 5
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/eval/demandprofiles.csv', cap_path='data/eval/caps.csv')
-mediator = StrategicCommunityMediator('CM', dm=dm, no_agents=no_agents, lagrange_mult=1, lagrange_lr=0.001)
+mediator = StrategicCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -189,9 +189,11 @@ elif sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 "CM": StrategicCommunityMediator.Supertype(
-                    cap_var=0.0,
-                    discount=0.8,
+                    cap_var=1,
+                    discount=0,
                     rollout=1,
+                    lagrange_mult=0,
+                    lagrange_lr=0
                 )    
             }
         )
@@ -203,8 +205,8 @@ elif sys.argv[1] == "rollout":
 
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/community_multi_combined/train1/",
-        checkpoint=164,
+        directory="~/ray_results/community_multi_combined/LATEST/",
+        #checkpoint=164,
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
@@ -213,7 +215,7 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        explore=True,
+        explore=False,
         num_repeats=1,
         num_workers=1,
         metrics=metrics,

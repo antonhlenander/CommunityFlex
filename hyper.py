@@ -87,9 +87,9 @@ if setup_type == 'multi':
 np.random.seed(321)
 random.seed(321)
 
-for i in range(25, 50):
+for i in range(0, 50):
     config = {
-        "lr": 10 ** np.random.choice([0.0001, 0.0002, 0.0003, 0.0004, 0.0005],),
+        "lr": 10 ** np.random.choice([0.0001],),
         "entropy_coeff": random.choice([0.01, 0.2, 0.3, 0.04, 0.05]),
         "lambda": np.random.uniform(0.9, 0.99),
         "gamma": np.random.uniform(0.8, 0.99),
@@ -117,7 +117,7 @@ for i in range(25, 50):
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir=f"~/ray_results/param_search/config{i}",
+        results_dir=f"~/ray_results/param_search2/config{i}",
     )
     os.makedirs(os.path.expanduser(f"~/ray_results/param_search/config{i}"), exist_ok=True)
     with open(os.path.expanduser(f"~/ray_results/param_search/config{i}/config.txt"), "w") as f:

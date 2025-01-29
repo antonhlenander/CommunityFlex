@@ -95,6 +95,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         cap_var: float = 0.5
         rollout: int = 0
         dso_penalty: int = 75
+        lagrange_mult: float = 0.5
+        lagrange_lr: float = 0.001
+        #no_agents: int = 0
 
     @dataclass(frozen=True)
     class MediatorView(ph.AgentView):
@@ -104,9 +107,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         discount: float
         cap_var: float
 
-    def __init__(self, agent_id, dm, no_agents, lagrange_mult, lagrange_lr):
+    def __init__(self, agent_id, dm):
         super().__init__(agent_id)
- 
+
         # Store the DataManager to get historical price data
         self.dm: DataManager = dm
         self.dso = DSO(dm)
@@ -172,12 +175,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.max_balance = 0
         self.max_reward = 0
         self.min_reward = 0
+        self.min_marg_netloss = 0
+        self.max_marg_netloss = 0
         self.acc_reward = 0
         self.reward = 0
-
-        # Lagrange multiplier and learning rate
-        self.lagrange_mult: float = lagrange_mult
-        self.lagrange_lr: float = lagrange_lr
 
         # Training stats
         self.different_prices = []
@@ -371,9 +372,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         if step % 2 == 0:
             self.penalized_amount = max(self.current_total_import - self.current_cap_limit, 0)
             self.penalty = self.penalized_amount*self.type.dso_penalty
-            self.capacity_balance = self.current_total_import - self.current_cap_limit
             self.mediator_netloss += self.penalty
             self.alltime_mediator_payments += self.penalty
+
 
     def compute_reward(self, ctx: ph.Context) -> float:
         step = ctx.env_view.current_step
@@ -381,12 +382,15 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         hour = ((sim_step-1) % 24) + 1
 
         # print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR REWARD ------------------")
-        
+        # print("Prev netloss ", self.prev_mediator_netloss)
+
         marginal_netloss = self.mediator_netloss - self.prev_mediator_netloss
         self.prev_mediator_netloss = self.mediator_netloss
-        normed_marginal_netloss = marginal_netloss / 150
-        self.max_reward = max(self.max_reward, normed_marginal_netloss)
-        self.min_reward = min(self.min_reward, normed_marginal_netloss)
+        self.max_marg_netloss = max(self.max_marg_netloss, marginal_netloss)
+        self.min_marg_netloss = min(self.min_marg_netloss, marginal_netloss)
+        # scale_factor = max(abs(self.max_marg_netloss), abs(self.min_marg_netloss))
+        # normed_marginal_netloss = marginal_netloss / (scale_factor+0.000001)
+        normed_marginal_netloss = marginal_netloss / 100
         np.clip(normed_marginal_netloss, -1, 1)
 
         # Compute the budget balance - positive for profit, negative for loss
@@ -396,11 +400,14 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     
         constraint_penalty = abs(normed_budget_balance)
 
-        self.reward = (1-self.lagrange_mult) * - normed_marginal_netloss - self.lagrange_mult * constraint_penalty
+        self.reward = (1-self.type.lagrange_mult) * - normed_marginal_netloss - self.type.lagrange_mult * constraint_penalty
         #self.reward = - constraint_penalty
 
         self.acc_reward += self.reward
-  
+
+        # print("Current netloss ", self.mediator_netloss)
+        # print("Marginal netloss: ", marginal_netloss)
+        # print("Reward: ", self.reward)
 
         # TODO: Normalize final reward
         # if ctx.env_view.proportion_time_elapsed == 1:
@@ -408,7 +415,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         #     # Compute new lagrange multiplier
         #     self.lagrange_mult = max(0, self.lagrange_mult + self.lagrange_lr * (constraint_penalty - 0.3))
         #     #print(f"New lagrange multiplier: {self.lagrange_mult}")
-
+        self.min_reward = min(self.min_reward, self.reward)
+        self.max_reward = max(self.max_reward, self.reward)
         return self.reward
 
     def encode_observation(self, ctx: ph.Context):
@@ -458,6 +466,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             if self.type.rollout == 0:
                 self.mediator_netloss = 0
                 self.prosumers_netloss = 0
+                self.prev_mediator_netloss = 0
+                #print("Reset netlosses")
         
 
         # Compute the budget balance - positive for profit, negative for loss
@@ -504,7 +514,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # print(f"The cap limit for the ending step: {prev_cap_limit}")
         # print(f"The cap limit for the coming step: {self.current_cap_limit}")
         # print(f"The budget balance: {self.budget_balance}")
-        # time.sleep(0.1)
+        # time.sleep(0.5)
         # print(f"Marginal net loss: {marginal_netloss}")
 
         observation = {
