@@ -190,8 +190,9 @@ elif sys.argv[1] == "rollout":
             {
                 "CM": StrategicCommunityMediator.Supertype(
                     cap_var=1,
-                    discount=0.5,
+                    discount=1,
                     rollout=1,
+                    dso_penalty=75,
                     lagrange_mult=0,
                     lagrange_lr=0
                 )    

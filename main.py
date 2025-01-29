@@ -177,10 +177,10 @@ if sys.argv[1] == "train":
         )
 
         policies = {
-            "prosumer_policy": (
-                TrainedPolicy,
-                follower_agents
-            ),
+            # "prosumer_policy": (
+            #     TrainedPolicy,
+            #     follower_agents
+            # ),
             "prosumer_policy": follower_agents,
             "mediator_policy": ["CM"]
         }
@@ -196,11 +196,11 @@ if sys.argv[1] == "train":
             'agent_supertypes': agent_supertypes,
         },
         rllib_config={
-            #"model": {"use_lstm": True},
+            "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.0001,
             "entropy_coeff": 0.05,
             "lambda": 0.9,
-            "gamma": 0.85,
+            "gamma": 0.9,
             "grad_clip": 7.6,
             "value_loss_coeff": 0.24,
             "rollout_fragment_length": 48*rollout_length,

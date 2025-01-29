@@ -219,8 +219,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     def observation_space(self):
         return gym.spaces.Dict(
             {
-                "next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
-                "infos": gym.spaces.Box(low= -1.0, high=1.0, shape=(17,), dtype=np.float32)
+                #"next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
+                "observations": gym.spaces.Box(low= -1.0, high=1.0, shape=(19,), dtype=np.float32),
+                "action_mask": gym.spaces.Box(0, 1, shape=(50,), dtype=np.float32)
             }
         )
 
@@ -401,7 +402,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # scale_factor = max(abs(self.max_marg_netloss), abs(self.min_marg_netloss))
         # normed_marginal_netloss = marginal_netloss / (scale_factor+0.000001)
         normed_marginal_netloss = marginal_netloss / 100
-        np.clip(normed_marginal_netloss, -1, 1)
+        normed_marginal_netloss = np.clip(normed_marginal_netloss, -1, 1)
 
         # Compute the budget balance - positive for profit, negative for loss
         self.budget_balance = self.prosumers_netloss - self.mediator_netloss
@@ -417,7 +418,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         # print("Current netloss ", self.mediator_netloss)
         # print("Marginal netloss: ", marginal_netloss)
-        # print("Reward: ", self.reward)
+        #print("Reward: ", self.reward)
 
         # TODO: Normalize final reward
         # if ctx.env_view.proportion_time_elapsed == 1:
@@ -528,12 +529,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # print(f"Marginal net loss: {marginal_netloss}")
 
         observation = {
-            "next_cap_limits": np.clip(
-                    np.divide(
-                        next_cap_limits,
-                        self.all_max_daily_demand, 
-                        dtype=np.float32), 0, 1),
-            "infos": np.clip(
+            # "next_cap_limits": np.clip(
+            #         np.divide(
+            #             next_cap_limits,
+            #             self.all_max_daily_demand, 
+            #             dtype=np.float32), 0, 1),
+            "observations":
                 np.array(
                     [
                         hr_idx / 24,
@@ -551,6 +552,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                         self.current_total_export / self.all_max_daily_demand,
                         self.penalized_amount / self.all_max_daily_demand,
                         prev_cap_limit / self.all_max_daily_demand,
+                        next_cap_limits[0] / self.all_max_daily_demand,
+                        next_cap_limits[1] / self.all_max_daily_demand,
                         self.current_cap_limit / self.all_max_daily_demand,
                         self.prosumers_netloss / 50000, # this observation can go negative
                         self.mediator_netloss / 50000, # this observation can go negative
@@ -560,9 +563,13 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                         # abs(min(normed_budget_balance, 0)),
                         # max(normed_budget_balance, 0),
                     ],
-                    dtype=np.float32), -1, 1)
+                    dtype=np.float32),
+                "action_mask" : np.ones(50, dtype=np.float32)
             }
+        
+        np.clip(observation['observations'], -1, 1, out=observation['observations'])
 
+        #print(f"Observation: {observation}")
         return observation
     
 
