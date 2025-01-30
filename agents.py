@@ -253,6 +253,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         self.current_local_price = self.prices[action]
 
+        # print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR ACTION ------------------")
+        # print(f"Agent {self.id} sets local price to: {self.current_local_price}")
+
         msgs = []
         for agent in ctx.neighbour_ids:
             msgs.append(
@@ -385,6 +388,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.penalty = self.penalized_amount*self.type.dso_penalty
             self.mediator_netloss += self.penalty
             self.alltime_mediator_payments += self.penalty
+            # print(f"-------------- Step {ctx.env_view.current_step} post message resolution -----------")
+            # print(f"Cap limit: {self.current_cap_limit}")
+            # print(f"Import: {self.current_total_import}")
+            # print(f"Penalized amount: {self.penalized_amount}")
+            # print(f"Penalty: {self.penalty}")
 
 
     def compute_reward(self, ctx: ph.Context) -> float:
@@ -393,7 +401,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         hour = ((sim_step-1) % 24) + 1
 
         # print(f"------------------ STEP {ctx.env_view.current_step} MEDIATOR REWARD ------------------")
-        # print("Prev netloss ", self.prev_mediator_netloss)
+        # print("Prev netloss ", self.prev_mediator_netloss)dd
 
         marginal_netloss = self.mediator_netloss - self.prev_mediator_netloss
         self.prev_mediator_netloss = self.mediator_netloss
@@ -401,7 +409,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.min_marg_netloss = min(self.min_marg_netloss, marginal_netloss)
         # scale_factor = max(abs(self.max_marg_netloss), abs(self.min_marg_netloss))
         # normed_marginal_netloss = marginal_netloss / (scale_factor+0.000001)
-        normed_marginal_netloss = marginal_netloss / 100
+        normed_marginal_netloss = marginal_netloss / 50000
         normed_marginal_netloss = np.clip(normed_marginal_netloss, -1, 1)
 
         # Compute the budget balance - positive for profit, negative for loss
@@ -418,7 +426,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
 
         # print("Current netloss ", self.mediator_netloss)
         # print("Marginal netloss: ", marginal_netloss)
-        #print("Reward: ", self.reward)
+        # print("Reward: ", self.reward)
 
         # TODO: Normalize final reward
         # if ctx.env_view.proportion_time_elapsed == 1:
@@ -514,18 +522,18 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # print(f"Capacity limits:", next_cap_limits)
         # print(f"Prev price: {prev_price}")
         # print(f"Current local price: {self.current_local_price}")
-        # print(f"Current feedin price: {self.feedin_price}")
+        # # print(f"Current feedin price: {self.feedin_price}")
         # print(f"Current grid price: {self.current_grid_price}")
-        # print(f"Current total supply in next step: {self.current_total_supply}")
+        # # print(f"Current total supply in next step: {self.current_total_supply}")
         # print(f"Import in this ending step {self.current_total_import}")
-        # print(f"Export in this ending step {self.current_total_export}")
-        # print(f"Total local sold: ", self.total_local_bought)
-        # time.sleep(0.1)
+        # # print(f"Export in this ending step {self.current_total_export}")
+        # # print(f"Total local sold: ", self.total_local_bought)
+        # # time.sleep(0.1)
         # print(f"Penalized amount: {self.penalized_amount}")
         # print(f"The cap limit for the ending step: {prev_cap_limit}")
         # print(f"The cap limit for the coming step: {self.current_cap_limit}")
-        # print(f"The budget balance: {self.budget_balance}")
-        # time.sleep(0.5)
+        # # print(f"The budget balance: {self.budget_balance}")
+        # time.sleep(1)
         # print(f"Marginal net loss: {marginal_netloss}")
 
         observation = {
@@ -1006,14 +1014,14 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
                 return msgs
         
-        # elif action == 4:
-        #     # Charge battery
-        #     # Can only charge if the agent has positive supply
-        #     if self.current_supply > 0:
-        #         self.charge_battery(self.current_supply)
-        #     else:
-        #         self.acc_invalid_actions += 1
-        #     return msgs
+        elif action == 4:
+            # Charge battery
+            # Can only charge if the agent has positive supply
+            if self.current_supply > 0:
+                self.charge_battery(self.current_supply)
+            else:
+                self.acc_invalid_actions += 1
+            return msgs
         
         elif action == 5:
             # If the agent has negative supply, and it has enough charge to cover it, it will do so

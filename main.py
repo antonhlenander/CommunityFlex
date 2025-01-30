@@ -166,8 +166,8 @@ if sys.argv[1] == "train":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=0.8,
-                    cap_var=0.8,
-                    dso_penalty=75,
+                    cap_var=0.5,
+                    dso_penalty=15,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
                     rollout_length=rollout_length,
@@ -177,11 +177,11 @@ if sys.argv[1] == "train":
         )
 
         policies = {
-            # "prosumer_policy": (
-            #     TrainedPolicy,
-            #     follower_agents
-            # ),
-            "prosumer_policy": follower_agents,
+            "prosumer_policy": (
+                TrainedPolicy,
+                follower_agents
+            ),
+            #"prosumer_policy": follower_agents,
             "mediator_policy": ["CM"]
         }
 
@@ -197,23 +197,23 @@ if sys.argv[1] == "train":
         },
         rllib_config={
             "model": {"custom_model": "torch_action_mask_model"},
-            "lr": 0.0001,
-            "entropy_coeff": 0.05,
-            "lambda": 0.9,
-            "gamma": 0.9,
-            "grad_clip": 7.6,
-            "value_loss_coeff": 0.24,
-            "rollout_fragment_length": 48*rollout_length,
-            "num_sgd_iter": 100,
-            "train_batch_size": 4000*2,
-            "sgd_minibatch_size": 1000*2,
+            "lr": 0.00001,
+            "entropy_coeff": 0.125,
+            "lambda": 0.98,
+            "gamma": 0.998,
+            #"grad_clip": 7.6,
+            #"value_loss_coeff": 0.24,
+            #"rollout_fragment_length": 48*rollout_length,
+            #"num_sgd_iter": 100,
+            #"train_batch_size": 4000*2,
+            #"sgd_minibatch_size": 1000*2,
         },
         iterations=300,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=4,
-        results_dir="~/ray_results/community_multi_combined_training",
+        num_workers=1,
+        results_dir="~/ray_results/community_multi_combined",
     )
 
 # This is used for simple runs, fx debugging locked states.

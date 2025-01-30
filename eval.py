@@ -23,7 +23,7 @@ NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.75
 rotate = False
-no_agents = 5
+no_agents = 10
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/eval/demandprofiles.csv', cap_path='data/eval/caps.csv')
@@ -179,9 +179,9 @@ elif sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity=1,
+                    #capacity=2,
                     eta=eta,
-                    rollout=0
+                    rollout=1
                 )    
                 for i in range(1, no_agents+1)
             }
@@ -189,8 +189,8 @@ elif sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 "CM": StrategicCommunityMediator.Supertype(
-                    cap_var=1,
-                    discount=1,
+                    cap_var=0.8,
+                    discount=0.8,
                     rollout=1,
                     dso_penalty=75,
                     lagrange_mult=0,
@@ -206,7 +206,7 @@ elif sys.argv[1] == "rollout":
 
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/community_multi_combined_training/LATEST/",
+        directory="~/ray_results/community_multi_combined/LATEST/",
         #checkpoint=164,
         env_class=StackelbergRewardDelayEnv,
         env_config={
