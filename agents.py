@@ -965,7 +965,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         if action == 0:
            # Buy enough power to cover own deficit
             if self.current_supply >= 0:
-                self.acc_invalid_actions += 1
+                print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
+                print("AGENT BUYS TO COVER DEFICIT WITH POSITIVE SUPPLY")
                 return msgs
             else:
                 msgs.extend(self.buy_power(abs(self.current_supply)))
@@ -974,7 +975,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         elif action == 1:
             # Buy power to charge and fill possible deficit
             if self.current_supply >= self.max_batt_charge:
-                self.acc_invalid_actions += 1
+                print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
+                print("AGENT BUYS CHARGE WITH FULL BATTERY")
             else:
                 deficit = abs(min(self.current_supply, 0))
                 # Capping the buy amount to 1 kWh
@@ -988,7 +990,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 msgs.extend(self.sell_power(self.current_supply))
                 return msgs
             else:
-                self.acc_invalid_actions += 1
+                print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
                 return msgs
             
         elif action == 3:            
@@ -1001,17 +1003,17 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 self.discharge_battery(self.max_batt_discharge)
                 return msgs
             else:
-                self.acc_invalid_actions += 1
+                print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
                 return msgs
         
-        elif action == 4:
-            # Charge battery
-            # Can only charge if the agent has positive supply
-            if self.current_supply > 0:
-                self.charge_battery(self.current_supply)
-            else:
-                self.acc_invalid_actions += 1
-            return msgs
+        # elif action == 4:
+        #     # Charge battery
+        #     # Can only charge if the agent has positive supply
+        #     if self.current_supply > 0:
+        #         self.charge_battery(self.current_supply)
+        #     else:
+        #         self.acc_invalid_actions += 1
+        #     return msgs
         
         elif action == 5:
             # If the agent has negative supply, and it has enough charge to cover it, it will do so
@@ -1021,8 +1023,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 return msgs
             # If the agent has negative supply and it does not have enough charge to cover it, this is an invalid action
             elif self.current_supply < 0 and self.max_batt_discharge < abs(self.current_supply):
-                self.acc_invalid_actions += 1
-                self.curr_invalid_actions = 1000
+                print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
                 return msgs
             # The agent might just have surplus energy and also choose this action, 
             # then it just does not cooperate, but it is a legal action.
