@@ -409,7 +409,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.min_marg_netloss = min(self.min_marg_netloss, marginal_netloss)
         # scale_factor = max(abs(self.max_marg_netloss), abs(self.min_marg_netloss))
         # normed_marginal_netloss = marginal_netloss / (scale_factor+0.000001)
-        normed_marginal_netloss = marginal_netloss / 50000
+        normed_marginal_netloss = marginal_netloss / 3000
         normed_marginal_netloss = np.clip(normed_marginal_netloss, -1, 1)
 
         # Compute the budget balance - positive for profit, negative for loss
