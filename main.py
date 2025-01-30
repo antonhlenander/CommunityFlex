@@ -198,7 +198,7 @@ if sys.argv[1] == "train":
         },
         rllib_config={
             #"model": {"custom_model": "torch_action_mask_model"},
-            "lr": 0.0001,
+            "lr": 0.00001,
             "entropy_coeff": 0.01,
             "lambda": 0.98,
             "gamma": 0.998,
