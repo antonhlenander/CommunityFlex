@@ -27,7 +27,7 @@ NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
-no_agents = 5
+no_agents = 10
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
@@ -154,8 +154,8 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    #capacity = UniformIntSampler(1, 1),
-                    capacity = 1,
+                    capacity = UniformIntSampler(1, 3),
+                    #capacity = 1,
                     eta=UniformFloatSampler(eta, eta),
                     rollout=0
                 )    
@@ -165,8 +165,8 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"CM": StrategicCommunityMediator.Supertype(
-                    discount=1,
-                    cap_var=1,
+                    discount=0.8,
+                    cap_var=0.8,
                     dso_penalty=75,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
