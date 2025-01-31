@@ -26,7 +26,7 @@ rotate = False
 no_agents = 5
 setup_type = sys.argv[2]
 
-dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/eval/demandprofiles.csv', cap_path='data/eval/caps.csv')
+dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/fullyearPV_singleDemand/demandprofiles.csv', cap_path='data/eval/caps.csv')
 mediator = StrategicCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)

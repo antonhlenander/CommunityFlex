@@ -155,7 +155,7 @@ if sys.argv[1] == "train":
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
                     #capacity = UniformIntSampler(2, 2),
-                    capacity = 1,
+                    capacity = 2,
                     eta=UniformFloatSampler(eta, eta),
                     rollout=0
                 )    
