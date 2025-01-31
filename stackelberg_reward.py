@@ -207,3 +207,8 @@ class StackelbergRewardDelayEnv(PhantomEnv):
         }
 
         return self.Step(observations, rewards, terminations, truncations, infos)
+    
+    # def is_terminated(self) -> bool:
+    #     """Implements the logic to decide when the episode is terminated."""
+    #     # The episode is terminated when the agent has arrived at 
+    #     return len(self._terminations) == len(self.strategic_agents)

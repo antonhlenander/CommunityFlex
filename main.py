@@ -154,8 +154,8 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    capacity = UniformIntSampler(1, 3),
-                    #capacity = 1,
+                    #capacity = UniformIntSampler(2, 2),
+                    capacity = 1,
                     eta=UniformFloatSampler(eta, eta),
                     rollout=0
                 )    
@@ -198,16 +198,16 @@ if sys.argv[1] == "train":
         },
         rllib_config={
             #"model": {"custom_model": "torch_action_mask_model"},
-            "lr": 0.00001,
+            "lr": 0.0001,
             "entropy_coeff": 0.01,
             "lambda": 0.98,
             "gamma": 0.998,
             #"grad_clip": 7.6,
             #"value_loss_coeff": 0.24,
-            #"rollout_fragment_length": NUM_EPISODE_STEPS,#48*rollout_length,
+            "rollout_fragment_length": 48, #*rollout_length,
             #"num_sgd_iter": 10,
-            #"train_batch_size": NUM_EPISODE_STEPS*4,
-            #"sgd_minibatch_size": int(NUM_EPISODE_STEPS*4/10),
+            "train_batch_size": NUM_EPISODE_STEPS,
+            "sgd_minibatch_size": int(NUM_EPISODE_STEPS/10),
         },
         iterations=300,
         checkpoint_freq=1,

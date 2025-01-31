@@ -65,7 +65,7 @@ class DSO():
         # Compute the residual demand
         residual_demand = self.total_daily_demand - total_prod
         self.residual_demand = max(residual_demand, 0)
-        return residual_demand
+        #return residual_demand
     
     def compute_capacity_limitation(self, step, var, ctx: ph.Context):
         daily_prices = self.price_array[step:step+24]
@@ -199,6 +199,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.price_plot = []
         self.action_plot = []
         self.balance_plot = []
+        self.import_plot = []
+        self.cap_plot = []
 
         self.prices = np.ndarray(50)
 
@@ -388,11 +390,33 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.penalty = self.penalized_amount*self.type.dso_penalty
             self.mediator_netloss += self.penalty
             self.alltime_mediator_payments += self.penalty
-            # print(f"-------------- Step {ctx.env_view.current_step} post message resolution -----------")
-            # print(f"Cap limit: {self.current_cap_limit}")
-            # print(f"Import: {self.current_total_import}")
-            # print(f"Penalized amount: {self.penalized_amount}")
-            # print(f"Penalty: {self.penalty}")
+
+            # Plotting
+            self.cap_plot.append(self.current_cap_limit)
+            self.import_plot.append(self.current_total_import)
+            self.price_plot.append(self.current_grid_price)
+            self.action_plot.append(self.current_local_price)
+
+        if step % 48 == 0:
+            plt.title("Step " + str(step))
+            plt.ylim(0, 15)
+            plt.bar(range(len(self.import_plot)), self.import_plot, color="red")
+            plt.bar(range(len(self.cap_plot)), self.cap_plot, color="green")
+            plt.scatter(range(len(self.action_plot)), self.action_plot, color="orange")
+            plt.scatter(range(len(self.price_plot)), self.price_plot, color="blue", alpha=0.5)
+            plt.savefig("cap_plot.png")
+            plt.close()
+            self.import_plot = []
+            self.cap_plot = []
+            self.price_plot = []
+            self.action_plot = []
+            
+
+        # print(f"-------------- Step {ctx.env_view.current_step} post message resolution -----------")
+        # print(f"Cap limit: {self.current_cap_limit}")
+        # print(f"Import: {self.current_total_import}")
+        # print(f"Penalized amount: {self.penalized_amount}")
+        # print(f"Penalty: {self.penalty}")
 
 
     def compute_reward(self, ctx: ph.Context) -> float:
@@ -463,8 +487,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             #     self.acc_total_interactions += view.interactions
 
         if step % 2 == 0:
-            self.current_cap_limit = self.yearly_cap_limits[hr_idx]
-            next_cap_limits = self.yearly_cap_limits[sim_step:sim_step+12]
+            self.current_cap_limit = self.yearly_cap_limits[sim_step]
+            next_cap_limits = self.yearly_cap_limits[sim_step+1:sim_step+13]
             #self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
             # a = 0.45 * (1.1 + np.sin((2 * np.pi * (sim_step) / 17280 / self.squeeze)+self.displacement))
             # upper_sin = 0.4 * a * (2.2 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
@@ -625,13 +649,13 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # TODO: Let's see what happens if max price is doubled
         self.max_price = self.max_price * 2
         self.prices = np.linspace(0.1, self.max_price, num=50)
-        # random.seed(time.time())
+        random.seed(time.time())
         # self.cycles = random.randint(4, 11)
         # self.displacement = random.randint(1, 7)
         # self.squeeze = random.randint(1, 2)
-        #if self.type.rollout == 0:
-            #self.random_day = max((random.randint(0, 363)*24)-1, 0)
-            # Random month instead of random day
+        # if self.type.training == 1:
+        #     self.random_day = max((random.randint(0, 363)*24)-1, 0)
+            #Random month instead of random day
             #self.random_day = (random.randint(0, 10)*30*24)
         # PLOTTING
         # fig, ax1 = plt.subplots()
@@ -643,9 +667,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # ax2.plot(self.balance_plot, color='black')
         # plt.savefig("price_plot.png")
         # plt.close()
-        # self.price_plot = []
-        # self.action_plot = []
-        # self.balance_plot = []
+        self.price_plot = []
+        self.action_plot = []
+        self.balance_plot = []
 
 
 
@@ -887,6 +911,12 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.net_loss: float = 0
         self.acc_reward: float = 0
 
+        # Plotting
+        self.price_plot = []
+        self.action_plot = []
+        self.charge_plot = []
+        self.supply_plot = []
+
         # Normalization factors
         self.all_max_load: float = 0
         self.all_max_prod: float = 0
@@ -970,7 +1000,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         msgs = []
         # print(f"----------- Step {ctx.env_view.current_step} decode action -------------")
         #msgs.extend(self.generate_info_message())
-
+        self.action_plot.append(action)
         if action == 0:
            # Buy enough power to cover own deficit
             if self.current_supply >= 0:
@@ -1036,6 +1066,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 return msgs
             # The agent might just have surplus energy and also choose this action, 
             # then it just does not cooperate, but it is a legal action.
+        
     
     @ph.agents.msg_handler(PriceUpdate)
     def handle_priceupdate(self, _ctx: ph.Context, msg: ph.Message):
@@ -1068,7 +1099,31 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def post_message_resolution(self, ctx: ph.Context):
         # We update everything after the messages have been resolved
         # This is where the the values are updated for the observation in next step
-        double_step = ctx.env_view.current_step 
+        double_step = ctx.env_view.current_step
+
+        if ctx.env_view.current_step % 2 == 0:
+            self.charge_plot.append(self.current_charge)
+            self.price_plot.append(self.current_local_price)
+            self.supply_plot.append(self.current_supply)
+
+        if ctx.env_view.current_step % 48 == 0:
+            fig, ax1 = plt.subplots()
+            ax2 = ax1.twinx()
+            plt.title(f"Agent {self.id} action plot")
+            ax2.scatter(range(len(self.action_plot)), self.action_plot, color='tab:green', alpha=0.5)
+            ax2.set_yticks([0, 1, 2, 3, 4, 5])
+            ax2.set_yticklabels(['buy', 'buycharge', 'sell', 'sellcharge', 'charge', 'noop'])
+            ax1.bar(range(len(self.charge_plot)), self.charge_plot, label="Charge", color='tab:orange', alpha=0.5)
+            ax1.bar(range(len(self.supply_plot)), self.supply_plot, label="Supply", color='tab:red', alpha=0.6)
+            ax1.scatter(range(len(self.price_plot)), self.price_plot, label="Price", color='tab:grey', alpha=0.8)
+            fig.tight_layout()
+            plt.savefig(f"liveplots/demand_charge_action_{self.id}.png")
+            plt.close()
+            self.charge_plot = []
+            self.action_plot = []
+            self.price_plot = []
+            self.supply_plot = []
+
         # only get new values if even step
         if double_step % 2 == 0:
             # Integer division taking into account odd and even steps
