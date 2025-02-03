@@ -27,6 +27,15 @@ class Setup():
                 agent = StrategicProsumerAgent(f'H{i+1}', 'CM', dm)
                 agents.append(agent)
             return agents
+        
+        elif setup_type == 'copy':
+            for i in range(no_agents):
+                if i+1 == 3 or i+1 == 13 or i+1 == 14:
+                    agent = SimpleProsumerAgent(f'H{i+1}', 'CM', dm)
+                else:
+                    agent = StrategicProsumerAgent(f'H{i+1}', 'CM', dm)
+                agents.append(agent)
+            return agents
 
         elif setup_type == 'multsing':
             for i in range(no_agents):

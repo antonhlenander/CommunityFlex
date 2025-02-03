@@ -27,13 +27,16 @@ NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
-no_agents = 5
+no_agents = 14
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
 mediator = StrategicCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
+
+simple_agents = [agent.id for agent in prosumer_agents if isinstance(agent, SimpleProsumerAgent)]
+strategic_prosumers = [agent.id for agent in prosumer_agents if agent.id not in simple_agents]
 
 # Define Network and create connections between Actors
 agents = prosumer_agents + [mediator]
@@ -154,8 +157,8 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"H{i}": StrategicProsumerAgent.Supertype(
-                    #capacity = UniformIntSampler(2, 2),
-                    capacity = 2,
+                    capacity = UniformIntSampler(1, 4),
+                    #capacity = 2,
                     eta=UniformFloatSampler(eta, eta),
                     rollout=0
                 )    
@@ -165,8 +168,8 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 f"CM": StrategicCommunityMediator.Supertype(
-                    discount=0.8,
-                    cap_var=0.5,
+                    discount=1,
+                    cap_var=1,
                     dso_penalty=15,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
@@ -178,11 +181,61 @@ if sys.argv[1] == "train":
         )
 
         policies = {
-            "prosumer_policy": (
-                TrainedPolicy,
-                follower_agents
-            ),
-            #"prosumer_policy": follower_agents,
+            # "prosumer_policy": (
+            #     TrainedPolicy,
+            #     follower_agents
+            # ),
+            "prosumer_policy": strategic_prosumers,
+            "mediator_policy": ["CM"]
+        }
+    ##############
+    # Copy setup
+    ##############
+    if setup_type == 'copy':
+        rollout_length=5
+        agent_supertypes.update(
+            {
+                aid : SimpleProsumerAgent.Supertype(
+                    capacity = 0,
+                    eta=0.1,
+                    greed=0.75,
+                    rollout=0
+                )    
+                for aid in simple_agents
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                aid : StrategicProsumerAgent.Supertype(
+                    capacity = UniformIntSampler(1, 4),
+                    #capacity = 2,
+                    eta=UniformFloatSampler(eta, eta),
+                    rollout=0
+                )    
+                for aid in strategic_prosumers
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                f"CM": StrategicCommunityMediator.Supertype(
+                    discount=1,
+                    cap_var=0.8,
+                    dso_penalty=15,
+                    lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
+                    lagrange_lr=0,
+                    rollout_length=rollout_length,
+                    rollout=1, # 1 to deactivate resets of netloss
+                    # range for langrange multiplier to update through training?
+                )    
+            }
+        )
+
+        policies = {
+            # "prosumer_policy": (
+            #     TrainedPolicy,
+            #     follower_agents
+            # ),
+            "prosumer_policy": strategic_prosumers,
             "mediator_policy": ["CM"]
         }
 
@@ -197,7 +250,7 @@ if sys.argv[1] == "train":
             'agent_supertypes': agent_supertypes,
         },
         rllib_config={
-            #"model": {"custom_model": "torch_action_mask_model"},
+            "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.0001,
             "entropy_coeff": 0.01,
             "lambda": 0.98,
@@ -205,7 +258,7 @@ if sys.argv[1] == "train":
             #"grad_clip": 7.6,
             #"value_loss_coeff": 0.24,
             "rollout_fragment_length": 48, #*rollout_length,
-            #"num_sgd_iter": 10,
+            "num_sgd_iter": 10,
             "train_batch_size": NUM_EPISODE_STEPS,
             "sgd_minibatch_size": int(NUM_EPISODE_STEPS/10),
         },
@@ -214,7 +267,7 @@ if sys.argv[1] == "train":
         policies=policies,
         metrics=metrics,
         num_workers=1,
-        results_dir="~/ray_results/community_multi_combined",
+        results_dir="~/ray_results/copy_training_multi",
     )
 
 # This is used for simple runs, fx debugging locked states.

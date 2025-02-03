@@ -221,9 +221,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     def observation_space(self):
         return gym.spaces.Dict(
             {
-                "next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
-                "observations": gym.spaces.Box(low= -1.0, high=1.0, shape=(17,), dtype=np.float32),
-                # "action_mask": gym.spaces.Box(0, 1, shape=(50,), dtype=np.float32)
+                #"next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
+                "observations": gym.spaces.Box(low= -1.0, high=1.0, shape=(18+12,), dtype=np.float32),
+                "action_mask": gym.spaces.Box(0, 1, shape=(50,), dtype=np.float32)
             }
         )
 
@@ -391,25 +391,25 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             self.mediator_netloss += self.penalty
             self.alltime_mediator_payments += self.penalty
 
-            # Plotting
-            self.cap_plot.append(self.current_cap_limit)
-            self.import_plot.append(self.current_total_import)
-            self.price_plot.append(self.current_grid_price)
-            self.action_plot.append(self.current_local_price)
+            #Plotting
+        #     self.cap_plot.append(self.current_cap_limit)
+        #     self.import_plot.append(self.current_total_import)
+        #     self.price_plot.append(self.current_grid_price)
+        #     self.action_plot.append(self.current_local_price)
 
-        if step % 48 == 0:
-            plt.title("Step " + str(step))
-            plt.ylim(0, 15)
-            plt.bar(range(len(self.import_plot)), self.import_plot, color="red")
-            plt.bar(range(len(self.cap_plot)), self.cap_plot, color="green")
-            plt.scatter(range(len(self.action_plot)), self.action_plot, color="orange")
-            plt.scatter(range(len(self.price_plot)), self.price_plot, color="blue", alpha=0.5)
-            plt.savefig("cap_plot.png")
-            plt.close()
-            self.import_plot = []
-            self.cap_plot = []
-            self.price_plot = []
-            self.action_plot = []
+        # if step % 48 == 0:
+        #     plt.title("Step " + str(step))
+        #     plt.ylim(-5, 15)
+        #     plt.bar(range(len(self.import_plot)), self.import_plot, color="red")
+        #     plt.bar(range(len(self.cap_plot)), self.cap_plot, color="green")
+        #     plt.scatter(range(len(self.action_plot)), self.action_plot, color="orange")
+        #     plt.scatter(range(len(self.price_plot)), self.price_plot, color="blue", alpha=0.5)
+        #     plt.savefig("cap_plot.png")
+        #     plt.close()
+        #     self.import_plot = []
+        #     self.cap_plot = []
+        #     self.price_plot = []
+        #     self.action_plot = []
             
 
         # print(f"-------------- Step {ctx.env_view.current_step} post message resolution -----------")
@@ -561,12 +561,9 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # time.sleep(1)
         # print(f"Marginal net loss: {marginal_netloss}")
 
+        next_cap_limits_obs = np.divide(next_cap_limits, self.all_max_daily_demand, dtype=np.float32)
+
         observation = {
-            "next_cap_limits": np.clip(
-                    np.divide(
-                        next_cap_limits,
-                        self.all_max_daily_demand, 
-                        dtype=np.float32), 0, 1),
             "observations":
                 np.array(
                     [
@@ -578,7 +575,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                         self.current_grid_price / max_price,
                         self.budget_balance / 50000, # this observation can go negative
                         normed_budget_balance, # this observation can go negative
-                        #self.current_total_supply / self.all_max_daily_demand,
+                        self.current_total_supply / self.all_max_daily_demand,
                         self.current_total_prod / self.all_max_daily_demand,
                         self.current_total_load / self.all_max_daily_demand,
                         self.current_total_import / self.all_max_daily_demand,
@@ -597,10 +594,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                         # max(normed_budget_balance, 0),
                     ],
                     dtype=np.float32),
-                # "action_mask" : np.ones(50, dtype=np.float32)
+                "action_mask" : np.ones(50, dtype=np.float32)
             }
         
+        observation['observations'] = np.concatenate((observation['observations'], next_cap_limits_obs))
         np.clip(observation['observations'], -1, 1, out=observation['observations'])
+
 
         #print(f"Observation: {observation}")
         return observation
@@ -1101,28 +1100,29 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # This is where the the values are updated for the observation in next step
         double_step = ctx.env_view.current_step
 
-        if ctx.env_view.current_step % 2 == 0:
-            self.charge_plot.append(self.current_charge)
-            self.price_plot.append(self.current_local_price)
-            self.supply_plot.append(self.current_supply)
+        # PLOTTING
+        # if ctx.env_view.current_step % 2 == 0:
+        #     self.charge_plot.append(self.current_charge)
+        #     self.price_plot.append(self.current_local_price)
+        #     self.supply_plot.append(self.current_supply)
 
-        if ctx.env_view.current_step % 48 == 0:
-            fig, ax1 = plt.subplots()
-            ax2 = ax1.twinx()
-            plt.title(f"Agent {self.id} action plot")
-            ax2.scatter(range(len(self.action_plot)), self.action_plot, color='tab:green', alpha=0.5)
-            ax2.set_yticks([0, 1, 2, 3, 4, 5])
-            ax2.set_yticklabels(['buy', 'buycharge', 'sell', 'sellcharge', 'charge', 'noop'])
-            ax1.bar(range(len(self.charge_plot)), self.charge_plot, label="Charge", color='tab:orange', alpha=0.5)
-            ax1.bar(range(len(self.supply_plot)), self.supply_plot, label="Supply", color='tab:red', alpha=0.6)
-            ax1.scatter(range(len(self.price_plot)), self.price_plot, label="Price", color='tab:grey', alpha=0.8)
-            fig.tight_layout()
-            plt.savefig(f"liveplots/demand_charge_action_{self.id}.png")
-            plt.close()
-            self.charge_plot = []
-            self.action_plot = []
-            self.price_plot = []
-            self.supply_plot = []
+        # if ctx.env_view.current_step % 48 == 0:
+        #     fig, ax1 = plt.subplots()
+        #     ax2 = ax1.twinx()
+        #     plt.title(f"Agent {self.id} action plot")
+        #     ax2.scatter(range(len(self.action_plot)), self.action_plot, color='tab:green', alpha=0.5)
+        #     ax2.set_yticks([0, 1, 2, 3, 4, 5])
+        #     ax2.set_yticklabels(['buy', 'buycharge', 'sell', 'sellcharge', 'charge', 'noop'])
+        #     ax1.bar(range(len(self.charge_plot)), self.charge_plot, label="Charge", color='tab:orange', alpha=0.5)
+        #     ax1.bar(range(len(self.supply_plot)), self.supply_plot, label="Supply", color='tab:red', alpha=0.6)
+        #     ax1.scatter(range(len(self.price_plot)), self.price_plot, label="Price", color='tab:grey', alpha=0.8)
+        #     fig.tight_layout()
+        #     plt.savefig(f"liveplots/demand_charge_action_{self.id}.png")
+        #     plt.close()
+        #     self.charge_plot = []
+        #     self.action_plot = []
+        #     self.price_plot = []
+        #     self.supply_plot = []
 
         # only get new values if even step
         if double_step % 2 == 0:
@@ -1231,9 +1231,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         marginal_utility = utility - self.utility_prev 
         # Update utility
         self.utility_prev = utility
-        if marginal_utility > 100 or marginal_utility < -100:
+        if abs(marginal_utility) > 100:
             print("!!!!!!!!!!!!!!!MARGINAL UTILITY: ", marginal_utility)
-        self.reward = min(marginal_utility/100, 1)
+        self.reward = max(min(marginal_utility/100, 1), -1)
         return self.reward
 
     def reset(self):
@@ -1295,7 +1295,7 @@ class SimpleProsumerAgent(ph.Agent):
 
     @dataclass
     class Supertype(ph.Supertype):
-        capacity: int = 1
+        capacity: int = 0
         eta: float = 0.1
         greed: float = 0.75
         rollout: int = 0

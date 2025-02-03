@@ -23,13 +23,16 @@ NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.75
 rotate = False
-no_agents = 5
+no_agents = 14
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/fullyearPV_singleDemand/demandprofiles.csv', cap_path='data/eval/caps.csv')
 mediator = StrategicCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
+
+simple_agents = [agent.id for agent in prosumer_agents if isinstance(agent, SimpleProsumerAgent)]
+strategic_prosumers = [agent.id for agent in prosumer_agents if agent.id not in simple_agents]
 
 # Define Network and create connections between Actors
 agents = prosumer_agents + [mediator]
@@ -204,9 +207,47 @@ elif sys.argv[1] == "rollout":
             }
         )
 
+    if setup_type == 'copy':
+        agent_supertypes.update(
+            {
+                aid : SimpleProsumerAgent.Supertype(
+                    capacity = 0,
+                    eta=0.1,
+                    greed=0.75,
+                    rollout=0
+                )    
+                for aid in simple_agents
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                aid : StrategicProsumerAgent.Supertype(
+                    #capacity = UniformIntSampler(1, 4),
+                    #capacity = 2,
+                    eta=0.1,
+                    rollout=1
+                )    
+                for aid in strategic_prosumers
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                f"CM": StrategicCommunityMediator.Supertype(
+                    discount=1,
+                    cap_var=1,
+                    dso_penalty=15,
+                    lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
+                    lagrange_lr=0,
+                    rollout=1, # 1 to deactivate resets of netloss
+                    # range for langrange multiplier to update through training?
+                )    
+            }
+        )
+
+
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/community_multi_combined/LATEST/",
+        directory="~/ray_results/copy_training_multi/LATEST/",
         #checkpoint=164,
         env_class=StackelbergRewardDelayEnv,
         env_config={
