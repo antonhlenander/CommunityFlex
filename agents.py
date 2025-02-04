@@ -744,7 +744,7 @@ class SimpleCommunityMediator(ph.Agent):#
             # Integer division taking into account odd and even steps
             sim_step = (ctx.env_view.current_step + 1) // 2
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
-            price = self.current_grid_price * 2 
+            price = self.current_grid_price
             noise = np.random.normal(1, self.type.std_dev)
             self.current_local_price = min(price*noise, self.max_price)
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
@@ -856,6 +856,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         capacity: int = 1
         eta: float = 0.1
         rollout: int = 0
+        price_multiplier: int = 1
 
     @dataclass(frozen=True)
     class ProsumerView(ph.AgentView):
@@ -920,6 +921,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.all_max_load: float = 0
         self.all_max_prod: float = 0
         self.all_max_cap: float = 0
+        self.own_max_demand: float = 0
+        self.own_max_prod: float = 0
         
         # Utility
         self.utility_prev: float = 0
@@ -1205,12 +1208,14 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
         observation = {
             'observations' : np.array([
+                    self.agent_id / 14,
                     self.current_local_price / self.max_price,
-                    self.current_load / self.all_max_cap,
-                    self.current_prod / self.all_max_cap,
+                    self.current_load / self.own_max_demand,
+                    self.current_prod / self.own_max_prod,
+                    self.current_supply / self.all_max_demand,
                     self.current_charge / self.all_max_cap,
-                    self.battery_cap / self.all_max_cap,
-                    self.charge_rate / self.all_max_cap,
+                    self.battery_cap / self.all_max_cap, # type variable
+                    self.charge_rate / self.all_max_cap, # maybe not necessary
                     self.acc_local_market_coin / 30000,
                     self.acc_local_market_cost / 30000,
                     self.acc_grid_interactions / 8760], dtype=np.float32),
@@ -1250,6 +1255,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_grid_interactions = 0
         self.acc_reward = 0
         self.net_loss = 0
+        self.agent_id = int(self.id[1:])
         #
         if self.type.rollout == 1:
             self.type.capacity = self.dm.get_agent_cap(self.id, self.episode)
@@ -1266,7 +1272,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge
-        self.current_charge = self.battery_cap / 2
+        #self.current_charge = self.battery_cap / 2
+        random.seed(time.time())
+        self.current_charge = random.uniform(0, self.battery_cap)
         # Reset battery constraints
         self.utility_prev = 0
         # Update battery constraints
@@ -1279,10 +1287,12 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.self_consumption = 0.0
         # Normalization factors
         self.all_max_load = self.dm.get_all_maxdemand()
-        self.all_max_prod = self.dm.get_all_maxprod()
+        self.all_max_prod = self.dm.get_all_maxprod()*self.type.capacity
+        self.own_max_demand = self.dm.get_agent_maxdemand(self.id)
+        self.own_max_prod = self.dm.get_agent_maxproduction(self.id)
         self.all_max_cap = 15
         self.max_price = self.dm.get_all_max_price() + 2.0666
-        self.max_price = self.max_price * 2
+        self.max_price = self.max_price * self.type.price_multiplier
 
             
 
