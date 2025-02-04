@@ -873,6 +873,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
 
+        self.id_vector = np.zeros(14, dtype=np.float64)
+        self.id_vector[int(agent_id[1:])] = 1
+
         # Store the ID of the community mediator
         self.mediator_id = mediator_id
 
@@ -1208,7 +1211,6 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
         observation = {
             'observations' : np.array([
-                    self.agent_id / 14,
                     self.current_local_price / self.max_price,
                     self.current_load / self.own_max_demand,
                     self.current_prod / self.own_max_prod,
@@ -1221,6 +1223,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                     self.acc_grid_interactions / 8760], dtype=np.float32),
             'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float32)
         }
+
+        observation['observations'] = np.concatenate((observation['observations'], self.agent_id))
 
         np.clip(observation['observations'], -1, 1, out=observation['observations'])
 
@@ -1255,7 +1259,6 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.acc_grid_interactions = 0
         self.acc_reward = 0
         self.net_loss = 0
-        self.agent_id = int(self.id[1:])
         #
         if self.type.rollout == 1:
             self.type.capacity = self.dm.get_agent_cap(self.id, self.episode)
