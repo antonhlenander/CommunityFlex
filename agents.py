@@ -873,8 +873,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     def __init__(self, agent_id, mediator_id, data_manager):
         super().__init__(agent_id)
 
-        self.id_vector = np.zeros(14, dtype=np.float64)
-        self.id_vector[int(agent_id[1:])] = 1
+        self.id_vector = np.zeros(14, dtype=np.float32)
+        self.id_vector[int(agent_id[1:])-1] = 1
 
         # Store the ID of the community mediator
         self.mediator_id = mediator_id
@@ -946,7 +946,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 # Can include type here as well in the future maybe
                 "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float32),
 
-                "observations": gym.spaces.Box(low=0.0, high=1.0, shape=(9,), dtype=np.float32),
+                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(22,), dtype=np.float32),
             }
         )
 
@@ -997,12 +997,13 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.current_local_bought = 0.0
         # Reset stats
      
-        # if ctx.env_view.current_step == 1:
-        #     self.episode += 1
+        if ctx.env_view.current_step == 1:
+            self.episode += 1
 
     def decode_action(self, ctx: ph.Context, action: np.ndarray):
         #print(action)
         msgs = []
+        # print(f"agent {self.id} action: ", action)
         # print(f"----------- Step {ctx.env_view.current_step} decode action -------------")
         #msgs.extend(self.generate_info_message())
         self.action_plot.append(action)
@@ -1211,20 +1212,21 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
         observation = {
             'observations' : np.array([
+                    self.hour / 24,
                     self.current_local_price / self.max_price,
-                    self.current_load / self.own_max_demand,
-                    self.current_prod / self.own_max_prod,
-                    self.current_supply / self.all_max_demand,
-                    self.current_charge / self.all_max_cap,
+                    self.current_load / self.norm_factor,
+                    self.current_prod / self.norm_factor,
+                    #self.current_supply / self.norm_factor,
+                    self.current_charge / self.type.capacity,
                     self.battery_cap / self.all_max_cap, # type variable
-                    self.charge_rate / self.all_max_cap, # maybe not necessary
-                    self.acc_local_market_coin / 30000,
-                    self.acc_local_market_cost / 30000,
+                    #self.charge_rate / self.all_max_cap, # ONLY FOR EVAL OLD POLICY
+                    self.acc_local_market_coin / self.acc_norm_factor,
+                    self.acc_local_market_cost / self.acc_norm_factor,
                     self.acc_grid_interactions / 8760], dtype=np.float32),
             'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float32)
         }
 
-        observation['observations'] = np.concatenate((observation['observations'], self.agent_id))
+        observation['observations'] = np.concatenate((observation['observations'], self.id_vector), dtype=np.float32)
 
         np.clip(observation['observations'], -1, 1, out=observation['observations'])
 
@@ -1240,9 +1242,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         marginal_utility = utility - self.utility_prev 
         # Update utility
         self.utility_prev = utility
-        if abs(marginal_utility) > 100:
-            print("!!!!!!!!!!!!!!!MARGINAL UTILITY: ", marginal_utility)
-        self.reward = max(min(marginal_utility/100, 1), -1)
+        if abs(marginal_utility) > self.reward_norm_factor:
+            print("!!!!!!!!!!!!!!!MARGINAL UTILITY: ", marginal_utility, self.reward_norm_factor)
+        self.reward = max(min(marginal_utility/self.reward_norm_factor, 1), -1)
         return self.reward
 
     def reset(self):
@@ -1292,10 +1294,14 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.all_max_load = self.dm.get_all_maxdemand()
         self.all_max_prod = self.dm.get_all_maxprod()*self.type.capacity
         self.own_max_demand = self.dm.get_agent_maxdemand(self.id)
-        self.own_max_prod = self.dm.get_agent_maxproduction(self.id)
+        self.own_max_prod = self.dm.get_agent_maxproduction(self.id)*self.type.capacity
+        self.norm_factor = max(self.own_max_demand, self.own_max_prod)
         self.all_max_cap = 15
         self.max_price = self.dm.get_all_max_price() + 2.0666
         self.max_price = self.max_price * self.type.price_multiplier
+        self.reward_norm_factor = self.norm_factor * self.max_price + self.charge_rate * self.max_price
+        self.acc_norm_factor = self.dm.get_agent_daily_demand(self.id)*self.max_price
+        self.acc_norm_factor = np.sum(self.acc_norm_factor)*365
 
             
 

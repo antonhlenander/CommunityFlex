@@ -27,7 +27,10 @@ no_agents = 14
 setup_type = sys.argv[2]
 
 dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/fullyearPV_singleDemand/demandprofiles.csv', cap_path='data/eval/caps.csv')
-mediator = StrategicCommunityMediator('CM', dm=dm)
+if setup_type == 'simple' or setup_type == 'multsing':
+    mediator = SimpleCommunityMediator('CM', dm=dm)
+else:
+    mediator = StrategicCommunityMediator('CM', dm=dm)
 
 prosumer_agents = Setup.get_agents(setup_type, dm, no_agents)
 
@@ -51,14 +54,14 @@ follower_agents = [agent.id for agent in prosumer_agents]
 metrics = {}
 
 metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
-metrics["cm/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
-metrics["cm/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
-metrics["cm/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
-metrics["cm/capacity_balance"] = ph.metrics.SimpleAgentMetric("CM", "capacity_balance")
-metrics["cm/capacity_limit"] = ph.metrics.SimpleAgentMetric("CM", "current_cap_limit")
-metrics["cm/total_import"] = ph.metrics.SimpleAgentMetric("CM", "current_total_import")
-metrics["cm/total_export"] = ph.metrics.SimpleAgentMetric("CM", "current_total_export")
-metrics["cm/current_grid_price"] = ph.metrics.SimpleAgentMetric("CM", "current_grid_price")
+# metrics["cm/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
+# metrics["cm/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
+# metrics["cm/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
+# metrics["cm/capacity_balance"] = ph.metrics.SimpleAgentMetric("CM", "capacity_balance")
+# metrics["cm/capacity_limit"] = ph.metrics.SimpleAgentMetric("CM", "current_cap_limit")
+# metrics["cm/total_import"] = ph.metrics.SimpleAgentMetric("CM", "current_total_import")
+# metrics["cm/total_export"] = ph.metrics.SimpleAgentMetric("CM", "current_total_export")
+# metrics["cm/current_grid_price"] = ph.metrics.SimpleAgentMetric("CM", "current_grid_price")
 metrics["env/total_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="sum")
 metrics["env/total_prod"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_prod", group_reduce_action="sum")
 metrics["env/total_charge"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_charge", group_reduce_action="sum")
@@ -71,7 +74,7 @@ metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "n
 metrics["env/current_price"] = ph.metrics.SimpleAgentMetric("CM", "current_local_price")
 metrics["env/min_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="min")
 metrics["env/max_load"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_load", group_reduce_action="max")
-metrics["cm/rewards"] = ph.metrics.SimpleAgentMetric("CM", "acc_reward")
+# metrics["cm/rewards"] = ph.metrics.SimpleAgentMetric("CM", "acc_reward")
 
 
 for aid in (follower_agents):
@@ -244,11 +247,44 @@ elif sys.argv[1] == "rollout":
             }
         )
 
+    if setup_type == 'multsing':
+        agent_supertypes.update(
+            {
+                aid : SimpleProsumerAgent.Supertype(
+                    capacity = 0,
+                    eta=0,
+                    greed=0,
+                    rollout=0
+                )    
+                for aid in simple_agents
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                aid : StrategicProsumerAgent.Supertype(
+                    #capacity = UniformIntSampler(1, 4),
+                    eta=0,
+                    rollout=1
+                )    
+                for aid in strategic_prosumers
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                "CM": SimpleCommunityMediator.Supertype(
+                    #discount=UniformFloatSampler(0.2, 1),
+                    #std_dev=UniformFloatSampler(0.015, 0.1),
+                    #std_dev=UniformFloatSampler(0.0, 0.0)
+                )    
+            }
+        )
+
 
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/copy_training_multi/LATEST/",
-        #checkpoint=164,
+        #directory="~/ray_results/single_policy_new/LATEST/",
+        directory="~/ray_results/community_flex_singlepolicy/PPO_StackelbergRewardDelayEnv_2024-12-17_10-29-59a6rem3ul/",
+        checkpoint=60,
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
@@ -257,7 +293,7 @@ elif sys.argv[1] == "rollout":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        explore=True,
+        explore=False,
         num_repeats=1,
         num_workers=1,
         metrics=metrics,
@@ -266,7 +302,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/flex_multi_combined/"
+    path = f"output/single_policy_old/"
     if not os.path.exists(path):
         os.makedirs(path)
 
