@@ -264,7 +264,10 @@ elif sys.argv[1] == "rollout":
                 aid : StrategicProsumerAgent.Supertype(
                     #capacity = UniformIntSampler(1, 4),
                     eta=0,
-                    rollout=1
+                    rollout=1,
+                    price_multiplier=2,
+                    maxbuy=1,
+                    maxsell=1
                 )    
                 for aid in strategic_prosumers
             }
@@ -282,9 +285,10 @@ elif sys.argv[1] == "rollout":
 
 
     results = ph.utils.rllib.rollout(
-        #directory="~/ray_results/single_policy_new/LATEST/",
-        directory="~/ray_results/community_flex_singlepolicy/PPO_StackelbergRewardDelayEnv_2024-12-17_10-29-59a6rem3ul/",
-        checkpoint=60,
+        directory="~/ray_results/single_policy_new/eta0.0/",
+        #directory="~/ray_results/community_flex_singlepolicy/PPO_StackelbergRewardDelayEnv_2024-12-17_10-29-59a6rem3ul/",
+        #directory='~/ray_results/single_policy_new/PPO_StackelbergRewardDelayEnv_2025-02-05_11-42-134musycil',
+        checkpoint=39,
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
@@ -302,7 +306,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/single_policy_old/"
+    path = f"output/single_policy_new_maxpricetest/"
     if not os.path.exists(path):
         os.makedirs(path)
 

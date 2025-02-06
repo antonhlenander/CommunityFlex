@@ -56,7 +56,10 @@ class DataManager:
     # Right now there is no unique agent production
     def get_agent_production(self, aid, step, noise_std=0.0):
         noise = 0
-        base_prod = self.prod_df[aid].iloc[step]
+        if step >= len(self.prod_df[aid]):
+            base_prod = self.prod_df[aid].iloc[step % len(self.prod_df[aid])]
+        else:
+            base_prod = self.prod_df[aid].iloc[step]
         # Temporary solar hack 
         # base_prod = base_prod * 10
         if base_prod > 0:

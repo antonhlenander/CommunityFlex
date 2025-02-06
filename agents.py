@@ -222,7 +222,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         return gym.spaces.Dict(
             {
                 #"next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
-                "observations": gym.spaces.Box(low= -1.0, high=1.0, shape=(18+12,), dtype=np.float32),
+                "observations": gym.spaces.Box(low= -1.0, high=1.0, shape=(16+12,), dtype=np.float32),
                 "action_mask": gym.spaces.Box(0, 1, shape=(50,), dtype=np.float32)
             }
         )
@@ -433,7 +433,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.min_marg_netloss = min(self.min_marg_netloss, marginal_netloss)
         # scale_factor = max(abs(self.max_marg_netloss), abs(self.min_marg_netloss))
         # normed_marginal_netloss = marginal_netloss / (scale_factor+0.000001)
-        normed_marginal_netloss = marginal_netloss / 3000
+        normed_marginal_netloss = marginal_netloss / 1000
         normed_marginal_netloss = np.clip(normed_marginal_netloss, -1, 1)
 
         # Compute the budget balance - positive for profit, negative for loss
@@ -567,8 +567,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             "observations":
                 np.array(
                     [
-                        hr_idx / 24,
-                        month / 12,
+                        # hr_idx / 24,
+                        # month / 12,
                         prev_price / max_price,
                         self.current_local_price / max_price,
                         self.feedin_price / max_price,
@@ -580,18 +580,11 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                         self.current_total_load / self.all_max_daily_demand,
                         self.current_total_import / self.all_max_daily_demand,
                         self.current_total_export / self.all_max_daily_demand,
+                        self.current_cap_limit / self.all_max_daily_demand,
                         self.penalized_amount / self.all_max_daily_demand,
                         prev_cap_limit / self.all_max_daily_demand,
-                        # next_cap_limits[0] / self.all_max_daily_demand,
-                        # next_cap_limits[1] / self.all_max_daily_demand,
-                        self.current_cap_limit / self.all_max_daily_demand,
                         self.prosumers_netloss / 50000, # this observation can go negative
                         self.mediator_netloss / 50000, # this observation can go negative
-                        #self.alltime_mediator_payments / 400000,
-                        #self.alltime_mediator_income / 400000,
-                        #self.prosumers_netloss / 400000,
-                        # abs(min(normed_budget_balance, 0)),
-                        # max(normed_budget_balance, 0),
                     ],
                     dtype=np.float32),
                 "action_mask" : np.ones(50, dtype=np.float32)
@@ -744,9 +737,10 @@ class SimpleCommunityMediator(ph.Agent):#
             # Integer division taking into account odd and even steps
             sim_step = (ctx.env_view.current_step + 1) // 2
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
-            price = self.current_grid_price
-            noise = np.random.normal(1, self.type.std_dev)
-            self.current_local_price = min(price*noise, self.max_price)
+            #price = self.current_grid_price
+            #noise = np.random.normal(1, self.type.std_dev)
+            #self.current_local_price = self.current_grid_price#min(price*noise, self.max_price)
+            self.current_local_price = pow(self.current_grid_price, 2) * 0.3
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
             #print(f"Simple mediator updated prices: {self.current_grid_price}, {self.current_local_price}, {self.current_feedin_price}")
 
@@ -754,7 +748,7 @@ class SimpleCommunityMediator(ph.Agent):#
         super().reset()
         self.price_array = self.dm.get_price_array()
         self.current_grid_price = self.price_array[0] + self.import_tariffs[0]
-        self.current_local_price = self.current_grid_price * 2
+        self.current_local_price = self.current_grid_price
         self.current_feedin_price = self.price_array[0] - self.export_tariff
         self.max_price = self.dm.get_all_max_price() + 2.0666
         self.max_price = self.max_price
@@ -857,6 +851,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         eta: float = 0.1
         rollout: int = 0
         price_multiplier: int = 1
+        maxbuy: int = 1
+        maxsell: int = 1
 
     @dataclass(frozen=True)
     class ProsumerView(ph.AgentView):
@@ -946,7 +942,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 # Can include type here as well in the future maybe
                 "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float32),
 
-                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(22,), dtype=np.float32),
+                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(22+1+6,), dtype=np.float32),
             }
         )
 
@@ -1024,8 +1020,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 print("AGENT BUYS CHARGE WITH FULL BATTERY")
             else:
                 deficit = abs(min(self.current_supply, 0))
-                # Capping the buy amount to 1 kWh
-                buy_amount = min(1, self.max_batt_charge) + deficit
+                # Capping the buy amount by type.maxbuy
+                buy_amount = min(self.type.maxbuy, self.max_batt_charge) + deficit
                 msgs.extend(self.buy_power(buy_amount))
                 return msgs
 
@@ -1036,19 +1032,28 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 return msgs
             else:
                 print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
+                print("ACTION 2: AGENT SELLS WITH NEGATIVE SUPPLY")
                 return msgs
             
         elif action == 3:            
             # Sell from battery and possible surplus production
-            sell_amount = self.max_batt_discharge + self.current_supply
-            # Add to self consumption if the agent has negative supply
-            self.self_consumption += abs(min(self.current_supply, 0))
+            deficit = abs(min(self.current_supply, 0))
+            surplus = max(self.current_supply, 0)
+            sell_amount = min(self.max_batt_discharge + self.current_supply, self.type.maxsell + surplus)
+            self.self_consumption += deficit
+            # print(f"-------- Selling from battery for Agent {self.id} STEP {ctx.env_view.current_step} --------")
+            # print("Deficit: ", deficit)
+            # print("Surplus: ", surplus)
+            # print("Sell amount: ", sell_amount)
+            # print("Discharge amount: ", sell_amount-surplus)
+            # time.sleep(2)
             if sell_amount > 0:
                 msgs.extend(self.sell_power(sell_amount))
-                self.discharge_battery(self.max_batt_discharge)
+                self.discharge_battery(sell_amount-surplus+deficit)
                 return msgs
             else:
                 print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
+                print("ACTION 3: AGENT SELLS WITH NEGATIVE SUPPLY")
                 return msgs
         
         elif action == 4:
@@ -1058,6 +1063,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 self.charge_battery(self.current_supply)
             else:
                 self.acc_invalid_actions += 1
+                print("ACTION 4: AGENT CHARGES WITH NEGATIVE SUPPLY")
             return msgs
         
         elif action == 5:
@@ -1069,6 +1075,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             # If the agent has negative supply and it does not have enough charge to cover it, this is an invalid action
             elif self.current_supply < 0 and self.max_batt_discharge < abs(self.current_supply):
                 print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
+                print("ACTION 5: NOT ENOUGH CHARGE TO COVER NEGATIVE SUPPLY")
                 return msgs
             # The agent might just have surplus energy and also choose this action, 
             # then it just does not cooperate, but it is a legal action.
@@ -1173,7 +1180,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         else:
             buy = 1
         # Can agent buy to charge?
-        if self.current_supply >= self.max_batt_charge:
+        if self.current_supply >= self.max_batt_charge or self.max_batt_charge == 0:
             buy_charge = 0
         else:
             buy_charge = 1
@@ -1198,25 +1205,27 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         else:
             noop = 1
 
-        # print(f"--------------- STEP {ctx.env_view.current_step} PROSUMER OBSERVATION --------------")
-        # print(f"Current local price: ", {self.current_local_price})
-        # print(f"Current load: {self.current_load}")
-        # print(f"Current production: {self.current_prod}")
-        # print(f"Current charge: {self.current_charge}")
-        # print(f"Battery cap: {self.all_max_cap}")
-        # print(f"Charge rate: {self.charge_rate}")
-        # print(f"Acc. income: {self.acc_local_market_coin}")
-        # print(f"Acc. cost: {self.acc_local_market_cost}")
-
-        # time.sleep(0.1)
+        # Compute demand forecast:
+        sim_step = (ctx.env_view.current_step + 1) // 2
+        # Convert to hours since demand profile is just 24 hours
+        hour = sim_step % 24
+        # Update current load only
+        loads = np.array([self.dm.get_agent_demand(self.id, h%24) for h in range(hour+1, hour+7)], dtype=np.float32)
+        # Update production
+        prods = np.array([self.dm.get_agent_production(self.id, step)*self.type.capacity for step in range (sim_step+1, sim_step+7)], dtype=np.float32)
+        # Update current own supply
+        supplies = loads - prods
+        loads = loads / self.norm_factor
+        prods = prods / self.norm_factor
+        supplies = supplies / self.norm_factor
 
         observation = {
             'observations' : np.array([
-                    self.hour / 24,
+                    #self.hour / 24,
                     self.current_local_price / self.max_price,
                     self.current_load / self.norm_factor,
                     self.current_prod / self.norm_factor,
-                    #self.current_supply / self.norm_factor,
+                    self.current_supply / self.norm_factor,
                     self.current_charge / self.type.capacity,
                     self.battery_cap / self.all_max_cap, # type variable
                     #self.charge_rate / self.all_max_cap, # ONLY FOR EVAL OLD POLICY
@@ -1227,6 +1236,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         }
 
         observation['observations'] = np.concatenate((observation['observations'], self.id_vector), dtype=np.float32)
+        observation['observations'] = np.concatenate((observation['observations'], supplies), dtype=np.float32)
 
         np.clip(observation['observations'], -1, 1, out=observation['observations'])
 
@@ -1249,6 +1259,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
 
     def reset(self):
         # Reset to sample type
+        # print("---------------------------------------")
         super().reset()
         if self.type.rollout == 0:
             print(f"Strategic agent reset with sample capacity: {self.type.capacity} and eta: {self.type.eta}")
@@ -1302,6 +1313,13 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.reward_norm_factor = self.norm_factor * self.max_price + self.charge_rate * self.max_price
         self.acc_norm_factor = self.dm.get_agent_daily_demand(self.id)*self.max_price
         self.acc_norm_factor = np.sum(self.acc_norm_factor)*365
+
+        
+        # print(f"Agent {self.id} norm factor: {self.norm_factor}")
+        # print(f"Agent {self.id} max price: {self.max_price}")
+        # print(f"Agent {self.id} charge rate: {self.charge_rate}")
+        # print(f"Agent {self.id}  reward norm factor: {self.reward_norm_factor}")
+              
 
             
 

@@ -63,18 +63,18 @@ metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, 
 metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agents, "self_consumption", group_reduce_action="sum")
 metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
 metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
-# metrics["CM/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
-# metrics["CM/penalized_amount"] = ph.metrics.SimpleAgentMetric("CM", "penalized_amount")
-# metrics["CM/no_of_diff_actions"] = ph.metrics.SimpleAgentMetric("CM", "no_different_prices")
-# metrics["CM/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
-# metrics["CM/mediator_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_mediator_payments")
-# metrics["CM/prosumers_netloss"] = ph.metrics.SimpleAgentMetric("CM", "prosumers_netloss")
-# metrics["CM/prosumers_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_prosumers_payments")
-# metrics["CM/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
-# metrics["CM/max_reward"] = ph.metrics.SimpleAgentMetric("CM", "max_reward")
-# metrics["CM/min_reward"] = ph.metrics.SimpleAgentMetric("CM", "min_reward")
-# metrics["CM/max_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "max_marg_netloss")
-# metrics["CM/min_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "min_marg_netloss")
+metrics["CM/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
+metrics["CM/penalized_amount"] = ph.metrics.SimpleAgentMetric("CM", "penalized_amount")
+metrics["CM/no_of_diff_actions"] = ph.metrics.SimpleAgentMetric("CM", "no_different_prices")
+metrics["CM/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
+metrics["CM/mediator_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_mediator_payments")
+metrics["CM/prosumers_netloss"] = ph.metrics.SimpleAgentMetric("CM", "prosumers_netloss")
+metrics["CM/prosumers_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_prosumers_payments")
+metrics["CM/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
+metrics["CM/max_reward"] = ph.metrics.SimpleAgentMetric("CM", "max_reward")
+metrics["CM/min_reward"] = ph.metrics.SimpleAgentMetric("CM", "min_reward")
+metrics["CM/max_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "max_marg_netloss")
+metrics["CM/min_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "min_marg_netloss")
 
 for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
@@ -172,57 +172,6 @@ if sys.argv[1] == "train":
         }
 
 
-    ##############
-    # Copy setup
-    ##############
-    if setup_type == 'copy':
-        rollout_length=5
-        agent_supertypes.update(
-            {
-                aid : SimpleProsumerAgent.Supertype(
-                    capacity = 0,
-                    eta=0.1,
-                    greed=0.75,
-                    rollout=0
-                )    
-                for aid in simple_agents
-            }
-        ) 
-        agent_supertypes.update(
-            {
-                aid : StrategicProsumerAgent.Supertype(
-                    capacity = UniformIntSampler(1, 4),
-                    #capacity = 2,
-                    eta=UniformFloatSampler(eta, eta),
-                    rollout=0
-                )    
-                for aid in strategic_prosumers
-            }
-        ) 
-        agent_supertypes.update(
-            {
-                f"CM": StrategicCommunityMediator.Supertype(
-                    discount=1,
-                    cap_var=0.8,
-                    dso_penalty=15,
-                    lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
-                    lagrange_lr=0,
-                    rollout_length=rollout_length,
-                    rollout=1, # 1 to deactivate resets of netloss
-                    # range for langrange multiplier to update through training?
-                )    
-            }
-        )
-
-        policies = {
-            # "prosumer_policy": (
-            #     TrainedPolicy,
-            #     follower_agents
-            # ),
-            "prosumer_policy": strategic_prosumers,
-            "mediator_policy": ["CM"]
-        }
-
     
     if setup_type == 'multsing':
         agent_supertypes.update(
@@ -259,6 +208,57 @@ if sys.argv[1] == "train":
         )
         policies = {"prosumer_policy": strategic_prosumers}
 
+    ##############
+    # Copy setup
+    ##############
+    if setup_type == 'copy':
+        rollout_length=4
+        agent_supertypes.update(
+            {
+                aid : SimpleProsumerAgent.Supertype(
+                    capacity = 0,
+                    rollout=0
+                )    
+                for aid in simple_agents
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                aid : StrategicProsumerAgent.Supertype(
+                    capacity = UniformIntSampler(1, 4),
+                    eta=0,
+                    price_multiplier=2,
+                    rollout=0,
+                    maxbuy=1,
+                    maxsell=1
+                )    
+                for aid in strategic_prosumers
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                f"CM": StrategicCommunityMediator.Supertype(
+                    discount=1,
+                    cap_var=0.5,
+                    dso_penalty=15,
+                    lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
+                    lagrange_lr=0,
+                    rollout_length=rollout_length,
+                    rollout=1, # 1 to deactivate resets of netloss
+                    # range for langrange multiplier to update through training?
+                )    
+            }
+        )
+
+        policies = {
+            "prosumer_policy": (
+                TrainedPolicy,
+                follower_agents
+            ),
+            #"prosumer_policy": strategic_prosumers,
+            "mediator_policy": ["CM"]
+        }
+
     ph.utils.rllib.train(
         algorithm="PPO",
         env_class=StackelbergRewardDelayEnv,
@@ -272,22 +272,22 @@ if sys.argv[1] == "train":
         rllib_config={
             "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.0001,
-            "entropy_coeff": 0.02,
+            "entropy_coeff": 0.1,
             "lambda": 0.98,
             "gamma": 0.998,
             #"grad_clip": 7.6,
-            #"value_loss_coeff": 0.24,q
-            "rollout_fragment_length": 48,
-            "num_sgd_iter": 10,
+            #"value_loss_coeff": 0.24,qs
+            "rollout_fragment_length": 48*rollout_length,
+            "num_sgd_iter": 5,
             "train_batch_size": NUM_EPISODE_STEPS*4,
-            "sgd_minibatch_size": int(NUM_EPISODE_STEPS*4/10),
+            "sgd_minibatch_size": int(NUM_EPISODE_STEPS),
         },
         iterations=300,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir="~/ray_results/single_policy_new",
+        results_dir="~/ray_results/new_multi",
     )
 
 # This is used for simple runs, fx debugging locked states.
