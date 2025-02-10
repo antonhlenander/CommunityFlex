@@ -459,8 +459,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
     
         constraint_penalty = abs(normed_budget_balance)
 
-        #self.reward = (1-self.type.lagrange_mult) * - normed_marginal_netloss - self.type.lagrange_mult * constraint_penalty
-        self.reward = -normed_marginal_netloss
+        self.reward = (1-self.type.lagrange_mult) * - normed_marginal_netloss - self.type.lagrange_mult * constraint_penalty
+        #self.reward = -normed_marginal_netloss
         #self.reward = - constraint_penalty
 
         self.acc_reward += self.reward

@@ -23,7 +23,7 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 8735*2
+NUM_EPISODE_STEPS = 48*7
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
@@ -233,7 +233,7 @@ if sys.argv[1] == "train":
                     eta=0.05,
                     price_multiplier=2,
                     rollout=0,
-                    maxbuy=1,
+                    maxbuy=0.5,
                     maxsell=1
                 )    
                 for aid in strategic_prosumers
@@ -245,7 +245,7 @@ if sys.argv[1] == "train":
                     discount=1,
                     cap_var=1,
                     dso_penalty=75,
-                    lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
+                    lagrange_mult=0.2, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
                     rollout_length=rollout_length,
                     rollout=1, # 1 to deactivate resets of netloss
@@ -286,7 +286,7 @@ if sys.argv[1] == "train":
             "gamma": 0.998,
             "grad_clip": 10,
             #"value_loss_coeff": 0.24,qs
-            "rollout_fragment_length": 48*4,
+            "rollout_fragment_length": 48,
             "num_sgd_iter": 5,
             "train_batch_size": NUM_EPISODE_STEPS*num_workers,
             "sgd_minibatch_size": int(NUM_EPISODE_STEPS),
@@ -298,52 +298,3 @@ if sys.argv[1] == "train":
         num_workers=num_workers,
         results_dir="~/ray_results/new_multi_2",
     )
-
-# This is used for simple runs, fx debugging locked states.
-elif sys.argv[1] == "test":
-    # Define agent supertypes
-    agent_supertypes = {}
-    agent_supertypes.update(
-        {
-            f"H{i}": SimpleProsumerAgent.Supertype(
-                capacity=UniformIntSampler(1, 4),
-                greed=UniformFloatSampler(0.5, 1.0),
-                eta=UniformFloatSampler(eta, eta)
-
-            )    
-            for i in range(1, no_agents+1)
-        },
-    )
-
-    # Define environment
-    env = stackelberg_custom.StackelbergEnvCustom(
-        num_steps=NUM_EPISODE_STEPS, 
-        network=network,
-        leader_agents=leader_agents,
-        follower_agents=follower_agents,
-        agent_supertypes=agent_supertypes
-    )
-    
-    terminate = False
-    episodes = 0
-
-    while episodes < 10:
-        observations = env.reset()
-    
-        while env.current_step < env.num_steps:
-            actions = {
-                agent.id: agent.action_space.sample()
-                for agent in env.strategic_agents
-            }
-            # log simple agent actions?
-            # log messages?
-
-            # Manually pass termination bool
-            if env.current_step+1 == env.num_steps:
-                terminate = True
-
-            step = env.step(actions, terminate)
-            observations = step.observations
-            rewards = step.rewards
-            infos = step.infos
-        episodes += 1
