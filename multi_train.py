@@ -13,7 +13,8 @@ from datamanager import DataManager
 from setup import Setup
 from phantom.utils.samplers import UniformFloatSampler, UniformIntSampler
 
-
+from ray.rllib.policy.policy import PolicySpec
+from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.examples.models.action_mask_model import TorchActionMaskModel
 from ray.rllib.models import ModelCatalog
 from ray.rllib.algorithms.ppo import PPOTorchPolicy
@@ -21,9 +22,8 @@ import os
 
 # Register the model
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
-
 # Params
-NUM_EPISODE_STEPS = 48*7
+NUM_EPISODE_STEPS = 48*30
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
@@ -112,29 +112,6 @@ infos = {}
 if sys.argv[1] == "train":
     agent_supertypes = {}
     
-    if setup_type == 'simple':
-        agent_supertypes.update(
-            {
-                f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=0,
-                    greed=UniformFloatSampler(0.5, 1),
-                    eta=UniformFloatSampler(eta, eta)
-                )    
-                for i in range(1, no_agents+1)
-            }
-        )
-        agent_supertypes.update(
-            {
-                f"CM": StrategicCommunityMediator.Supertype(
-                    discount=0.8,
-                    cap_var=0.8
-                )    
-            }
-        )
-
-        policies = {"mediator_policy": ["CM"]}
-
-   
     if setup_type == 'multi':
         rollout_length=5
         agent_supertypes.update(
@@ -171,44 +148,6 @@ if sys.argv[1] == "train":
             "prosumer_policy": strategic_prosumers,
             "mediator_policy": ["CM"]
         }
-
-
-    
-    if setup_type == 'multsing':
-        agent_supertypes.update(
-            {
-                aid : SimpleProsumerAgent.Supertype(
-                    capacity = 0,
-                    eta=0,
-                    greed=0,
-                    rollout=0
-                )    
-                for aid in simple_agents
-            }
-        ) 
-        agent_supertypes.update(
-            {
-                aid : StrategicProsumerAgent.Supertype(
-                    capacity = UniformIntSampler(1, 4),
-                    eta=0,
-                    rollout=0,
-                    maxbuy=1,
-                    maxsell=1
-                )    
-                for aid in strategic_prosumers
-            }
-        ) 
-        agent_supertypes.update(
-            {
-                "CM": SimpleCommunityMediator.Supertype(
-                    #discount=UniformFloatSampler(0.2, 1),
-                    std_dev=UniformFloatSampler(0.015, 0.1),
-                    #std_dev=UniformFloatSampler(0.0, 0.0)
-                )    
-            }
-        )
-        policies = {"prosumer_policy": strategic_prosumers}
-
 
     ##############
     # Copy setup
@@ -257,11 +196,11 @@ if sys.argv[1] == "train":
         )
 
         policies = {
-            "prosumer_policy": (
-                TrainedPolicy,
-                follower_agents
-            ),
-            #"prosumer_policy": strategic_prosumers,
+        #     "prosumer_policy": (
+        #         TrainedPolicy,
+        #         follower_agents
+        #     ),
+            "prosumer_policy": strategic_prosumers,
             "mediator_policy": ["CM"]
         }
 
@@ -278,16 +217,36 @@ if sys.argv[1] == "train":
             'agent_supertypes': agent_supertypes,
         },
         rllib_config={
+            "multiagent": {
+                "policies": {
+                    "mediator_policy": PolicySpec(
+                        policy_class=None,
+                        action_space=mediator.action_space,
+                        observation_space=mediator.observation_space,
+                        config={
+                            "lr": 0.0001,
+                            "num_sgd_iter": 5,
+                            "entropy_coeff_schedule": [[0, 1], [1e+5, 1], [1e+6, 0.1]],
+                        },
+                    ),
+                    "prosumer_policy": PolicySpec(
+                        policy_class=None,
+                        action_space=prosumer_agents[0].action_space,
+                        observation_space=prosumer_agents[0].observation_space,
+                        config={
+                            "lr": 0.0003,
+                            "num_sgd_iter": 100,
+                            "entropy_coeff": 0.025,
+                        },
+                    ),
+                },
+            },
             "model": {"custom_model": "torch_action_mask_model"},
-            "lr": 0.0001,
-            #"entropy_coeff_schedule": [[0, 0.8], [pow(10, 6), 0.05]],
-            "entropy_coeff": 0.1,
             "lambda": 0.98,
             "gamma": 0.998,
             "grad_clip": 10,
-            #"value_loss_coeff": 0.24,qs
-            "rollout_fragment_length": 48,
-            "num_sgd_iter": 5,
+            "vf_loss_coeff": 0.05,
+            "rollout_fragment_length": 48*4,
             "train_batch_size": NUM_EPISODE_STEPS*num_workers,
             "sgd_minibatch_size": int(NUM_EPISODE_STEPS),
         },

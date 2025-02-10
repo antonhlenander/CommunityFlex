@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import ray
 
+import custom_train
 from trained_policy import TrainedPolicy
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent, StrategicCommunityMediator
 import stackelberg_custom
@@ -23,11 +24,9 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 8735*2
-eta = 0.1 # should this be trainable?
-greed = 0.8
+NUM_EPISODE_STEPS = 8640
 rotate = False
-no_agents = 14
+no_agents = 5
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
@@ -110,30 +109,8 @@ infos = {}
 
 if sys.argv[1] == "train":
     agent_supertypes = {}
-    
-    if setup_type == 'simple':
-        agent_supertypes.update(
-            {
-                f"H{i}": SimpleProsumerAgent.Supertype(
-                    capacity=0,
-                    greed=UniformFloatSampler(0.5, 1),
-                    eta=UniformFloatSampler(eta, eta)
-                )    
-                for i in range(1, no_agents+1)
-            }
-        )
-        agent_supertypes.update(
-            {
-                f"CM": StrategicCommunityMediator.Supertype(
-                    discount=0.8,
-                    cap_var=0.8
-                )    
-            }
-        )
 
-        policies = {"mediator_policy": ["CM"]}
 
-   
     if setup_type == 'multi':
         rollout_length=5
         agent_supertypes.update(
@@ -224,47 +201,13 @@ if sys.argv[1] == "train":
             #     TrainedPolicy,
             #     follower_agents
             # ),
-            "prosumer_policy": strategic_prosumers,
-            "mediator_policy": ["CM"]
+            "low_level_policy": strategic_prosumers,
+            "high_level_policy": ["CM"]
         }
 
-    if setup_type == 'multsing':
-        agent_supertypes.update(
-            {
-                aid : SimpleProsumerAgent.Supertype(
-                    capacity = 0,
-                    eta=0,
-                    greed=0,
-                    rollout=0
-                )    
-                for aid in simple_agents
-            }
-        ) 
-        agent_supertypes.update(
-            {
-                aid : StrategicProsumerAgent.Supertype(
-                    capacity = UniformIntSampler(1, 4),
-                    eta=0.05,
-                    price_multiplier=1,
-                    rollout=0,
-                    maxbuy=1,
-                    maxsell=1
-                )    
-                for aid in strategic_prosumers
-            }
-        ) 
-        agent_supertypes.update(
-            {
-                "CM": SimpleCommunityMediator.Supertype(
-                    #discount=UniformFloatSampler(0.2, 1),
-                    std_dev=UniformFloatSampler(0.015, 0.1),
-                    #std_dev=UniformFloatSampler(0.0, 0.0)
-                )    
-            }
-        )
-        policies = {"prosumer_policy": strategic_prosumers}
 
-    ph.utils.rllib.train(
+    # 
+    custom_train.train(
         algorithm="PPO",
         env_class=StackelbergRewardDelayEnv,
         env_config={
@@ -274,16 +217,31 @@ if sys.argv[1] == "train":
             'follower_agents': follower_agents,
             'agent_supertypes': agent_supertypes,
         },
-        rllib_config={
+        high_level_rllib_config={
+            "multiagent": {}
             "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.0001,
-            "entropy_coeff": 0.02,
+            "entropy_coeff": 0.1,
             "lambda": 0.98,
             "gamma": 0.998,
             #"grad_clip": 7.6,
-            #"value_loss_coeff": 0.24,q
-            "rollout_fragment_length": 48,
-            "num_sgd_iter": 10,
+            "vf_loss_coeff": 0.05,
+            "rollout_fragment_length": 48*4,
+            "num_sgd_iter": 5,
+            "train_batch_size": NUM_EPISODE_STEPS*4,
+            "sgd_minibatch_size": int(NUM_EPISODE_STEPS),
+        },
+        low_level_rllib_config={
+            "multiagent": {"policies"}
+            "model": {"custom_model": "torch_action_mask_model"},
+            "lr": 0.0003,
+            "entropy_coeff": 0.025,
+            "lambda": 0.98,
+            "gamma": 0.998,
+            "grad_clip": 7.6,
+            "vf_loss_coeff": 0.05,
+            "rollout_fragment_length": 48*4,
+            "num_sgd_iter": 200,
             "train_batch_size": NUM_EPISODE_STEPS*4,
             "sgd_minibatch_size": int(NUM_EPISODE_STEPS),
         },
@@ -292,54 +250,5 @@ if sys.argv[1] == "train":
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir="~/ray_results/single_policy_new2",
+        results_dir="~/ray_results/multi_new",
     )
-
-# This is used for simple runs, fx debugging locked states.
-elif sys.argv[1] == "test":
-    # Define agent supertypes
-    agent_supertypes = {}
-    agent_supertypes.update(
-        {
-            f"H{i}": SimpleProsumerAgent.Supertype(
-                capacity=UniformIntSampler(1, 4),
-                greed=UniformFloatSampler(0.5, 1.0),
-                eta=UniformFloatSampler(eta, eta)
-
-            )    
-            for i in range(1, no_agents+1)
-        },
-    )
-
-    # Define environment
-    env = stackelberg_custom.StackelbergEnvCustom(
-        num_steps=NUM_EPISODE_STEPS, 
-        network=network,
-        leader_agents=leader_agents,
-        follower_agents=follower_agents,
-        agent_supertypes=agent_supertypes
-    )
-    
-    terminate = False
-    episodes = 0
-
-    while episodes < 10:
-        observations = env.reset()
-    
-        while env.current_step < env.num_steps:
-            actions = {
-                agent.id: agent.action_space.sample()
-                for agent in env.strategic_agents
-            }
-            # log simple agent actions?
-            # log messages?
-
-            # Manually pass termination bool
-            if env.current_step+1 == env.num_steps:
-                terminate = True
-
-            step = env.step(actions, terminate)
-            observations = step.observations
-            rewards = step.rewards
-            infos = step.infos
-        episodes += 1
