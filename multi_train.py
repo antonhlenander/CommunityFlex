@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import ray
 
+import train_from_checkpoint
 from trained_policy import TrainedPolicy
 from agents import SimpleProsumerAgent, SimpleCommunityMediator, StrategicProsumerAgent, StrategicCommunityMediator
 import stackelberg_custom
@@ -153,13 +154,11 @@ if sys.argv[1] == "train":
     # Copy setup
     ##############
     if setup_type == 'copy':
-        rollout_length=5
+        rollout_length=4
         agent_supertypes.update(
             {
                 aid : SimpleProsumerAgent.Supertype(
-                    capacity =0,
-                    eta=0,
-                    greed=0.75,
+                    capacity=0,
                     rollout=0
                 )    
                 for aid in simple_agents
@@ -184,13 +183,12 @@ if sys.argv[1] == "train":
                     discount=1,
                     cap_var=1,
                     dso_penalty=75,
-                    lagrange_mult=0.2, # 0 for penalty objective, 1 for budget balance objective
+                    lagrange_mult=0.0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
                     rollout_length=rollout_length,
                     rollout=1, # 1 to deactivate resets of netloss
                     reward_scale=1000,
                     no_agents=no_agents
-                    # range for langrange multiplier to update through training?
                 )    
             }
         )
@@ -206,7 +204,8 @@ if sys.argv[1] == "train":
 
     num_workers = int(sys.argv[3])
 
-    ph.utils.rllib.train(
+    train_from_checkpoint.train(
+        policy_checkpoint="/Users/antonlenander/ray_results/single_policy_new/eta0.1_new_allfixed/checkpoint_000034/policies/prosumer_policy",
         algorithm="PPO",
         env_class=StackelbergRewardDelayEnv,
         env_config={

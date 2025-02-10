@@ -19,9 +19,9 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 
 # Params
-NUM_EPISODE_STEPS = 48
+NUM_EPISODE_STEPS = 48*30
 eta = 0.1 # should this be trainable?
-greed = 0.75
+greed = 0.8
 rotate = False
 no_agents = 5
 setup_type = sys.argv[2]
@@ -140,7 +140,7 @@ if sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 aid : SimpleProsumerAgent.Supertype(
-                    capacity = 0,
+                    capacity=0,
                     rollout=0
                 )    
                 for aid in simple_agents
@@ -149,11 +149,10 @@ if sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 aid : StrategicProsumerAgent.Supertype(
-                    #capacity = UniformIntSampler(1, 4),
                     eta=0.05,
                     price_multiplier=2,
                     rollout=1,
-                    maxbuy=1,
+                    maxbuy=0.5,
                     maxsell=1
                 )    
                 for aid in strategic_prosumers
@@ -163,33 +162,19 @@ if sys.argv[1] == "rollout":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=1,
-                    cap_var=0.5,
-                    dso_penalty=5,
+                    cap_var=1,
+                    dso_penalty=75,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
-                    #rollout_length=,
-                    rollout=1, # 1 to deactivate resets of netloss
-                    # range for langrange multiplier to update through training?
+                    rollout=1,
+                    reward_scale=1000,
+                    no_agents=no_agents # 1 to deactivate resets of netloss
                 )    
             }
         )
 
-        policies = {
-            # "prosumer_policy": (
-            #     TrainedPolicy,
-            #     follower_agents
-            # ),
-            "prosumer_policy": strategic_prosumers,
-            "mediator_policy": ["CM"]
-        }
-
-
-
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/new_multi/LATEST",
-        #directory="~/ray_results/community_flex_singlepolicy/PPO_StackelbergRewardDelayEnv_2024-12-17_10-29-59a6rem3ul/",
-        #directory='~/ray_results/single_policy_new/PPO_StackelbergRewardDelayEnv_2025-02-05_11-42-134musycil',
-        #checkpoint=39,
+        directory="~/ray_results/new_multi_2/LATEST",
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
@@ -207,7 +192,7 @@ if sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/new_multi/"
+    path = f"output/new_multi_3/"
     if not os.path.exists(path):
         os.makedirs(path)
 
