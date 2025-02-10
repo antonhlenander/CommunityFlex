@@ -33,6 +33,8 @@ class DSO():
         self.daily_prices: list = []
         self.total_daily_demand: int = 0
         self.all_daily_prod: list = []
+        self.max_hourly_demand: float = 0
+        self.max_hourly_production: float = 0
 
         self.price_array = self.dm.get_price_array()
 
@@ -44,8 +46,16 @@ class DSO():
     def agents_init(self, ctx: ph.Context):
         self.total_daily_demand = 0
         views = ctx.agent_views.items()
+        agent_list = []
+        self.max_hourly_production = 0
+        self.max_hourly_demand = 0
         for aid, view in views:
+            agent_list.append(aid)
             self.total_daily_demand += self.dm.get_agent_summed_demand(aid)
+            agent_production = self.dm.get_agent_maxproduction(aid)*view.capacity
+            self.max_hourly_production += agent_production
+        self.max_hourly_demand = self.dm.get_max_hourly_demand(agent_list)
+        return max(self.max_hourly_demand, self.max_hourly_production)
     
     def compute_yearly_capacity_limits(self, var, ctx: ph.Context):
         yearly_cap_limits = []
@@ -98,6 +108,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         lagrange_mult: float = 0.5
         lagrange_lr: float = 0.001
         rollout_length: int = 1
+        reward_scale: int = 1000
+        no_agents: int = 1
         #no_agents: int = 0
 
     @dataclass(frozen=True)
@@ -222,7 +234,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         return gym.spaces.Dict(
             {
                 #"next_cap_limits": gym.spaces.Box(low=0.0, high=1.0, shape=(12,), dtype=np.float32),
-                "observations": gym.spaces.Box(low= -1.0, high=1.0, shape=(16+12,), dtype=np.float32),
+                "observations": gym.spaces.Box(low= -1.0, high=1.0, shape=(16+12-2,), dtype=np.float32),
                 "action_mask": gym.spaces.Box(0, 1, shape=(50,), dtype=np.float32)
             }
         )
@@ -240,6 +252,8 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.acc_total_interactions = 0
         self.current_total_import = 0
         self.current_total_export = 0
+        self.current_total_load = 0
+        self.current_total_prod = 0
 
     # Decode actions is the first method that is called in a step
     def decode_action(self, ctx: ph.Context, action):
@@ -374,8 +388,10 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             # Reset budget balance
             #self.budget_balance = 0
             # Reset 
-            #self.current_total_import = 0
-            #self.current_total_export = 0
+            # self.current_total_import = 0
+            # self.current_total_export = 0
+            # self.current_total_load = 0
+            # self.current_total_prod = 0
             #self.total_supply = 0
             self.total_netloss = 0
             self.total_interactions = 0
@@ -433,7 +449,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.min_marg_netloss = min(self.min_marg_netloss, marginal_netloss)
         # scale_factor = max(abs(self.max_marg_netloss), abs(self.min_marg_netloss))
         # normed_marginal_netloss = marginal_netloss / (scale_factor+0.000001)
-        normed_marginal_netloss = marginal_netloss / 1000
+        normed_marginal_netloss = marginal_netloss / self.type.reward_scale
         normed_marginal_netloss = np.clip(normed_marginal_netloss, -1, 1)
 
         # Compute the budget balance - positive for profit, negative for loss
@@ -477,34 +493,20 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         ###############################################################
 
         if step == 0:
-            self.dso.agents_init(ctx)
+            self.obs_norm_factor = self.dso.agents_init(ctx) # Also initializes specific agent variables for DSO
+            self.obs_norm_factor = self.obs_norm_factor + 1*self.type.no_agents
             self.yearly_cap_limits = self.dso.compute_yearly_capacity_limits(self.type.cap_var, ctx)
             # Extends yearly_cap_limits such that we dont get out of bounds error
             self.yearly_cap_limits.extend([10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10])
-            #views = ctx.agent_views.items()
-            # for key, view in views:
-            #     self.current_total_supply += view.supply
-            #     self.acc_total_interactions += view.interactions
+
 
         if step % 2 == 0:
             self.current_cap_limit = self.yearly_cap_limits[sim_step]
             next_cap_limits = self.yearly_cap_limits[sim_step+1:sim_step+13]
-            #self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
-            # a = 0.45 * (1.1 + np.sin((2 * np.pi * (sim_step) / 17280 / self.squeeze)+self.displacement))
-            # upper_sin = 0.4 * a * (2.2 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
-            # lower_sin = 0.4 * a * (1.1 + np.sin((2 * np.pi * (sim_step) / 1440 / self.cycles)+self.displacement))
-            # upper = self.prices[min(int(upper_sin*39), 39)]
-            # lower = self.prices[min(int(lower_sin*39), 39)]
-            # daily = ((lower+upper)/2) + ((upper-lower)/2) * np.sin((2*np.pi*(sim_step) / 24))
-            #self.price_plot.append(daily)
-            #self.current_grid_price = daily
             self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
-            #self.price_plot.append(self.current_grid_price)
             self.feedin_price = self.current_grid_price - self.dso.export_tariff
             self.current_local_tariff = self.dso.import_tariffs_winter[hr_idx]*(1-self.type.discount)
-            #print(f"DAILY RESIDUAL DEMAND: {self.next_residual_demand}")
-            #print(f"NEXT CAP LIMITS: {next_cap_limits}")
-            #print(f"SUM OF CAP LIMITS: {np.sum(next_cap_limits)}")
+
 
         if step % 48*self.type.rollout_length == 0:
             if self.type.rollout == 0:
@@ -517,13 +519,6 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # Compute the budget balance - positive for profit, negative for loss
         self.budget_balance = self.prosumers_netloss - self.mediator_netloss
         normed_budget_balance = self.budget_balance / (abs(self.mediator_netloss)+abs(self.prosumers_netloss)+0.000001)
-
-        # print("Prosumer net loss: ", self.prosumers_netloss)
-        # print("Mediator net loss: ", self.mediator_netloss)
-        # print("Budget balance: ", self.budget_balance)
-        # print("Normed budget balance: ", normed_budget_balance)
-        # print("Negative budget balance: ", abs(min(self.budget_balance, 0))/200000,)
-        # print("Positive budget balance: ", max(self.budget_balance, 0)/200000,)
 
         views = ctx.agent_views.items()
         for key, view in views:
@@ -544,24 +539,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         max_price = self.max_price
         epsilon = 0.000001
 
-        # print(f"Capacity limits:", next_cap_limits)
-        # print(f"Prev price: {prev_price}")
-        # print(f"Current local price: {self.current_local_price}")
-        # # print(f"Current feedin price: {self.feedin_price}")
-        # print(f"Current grid price: {self.current_grid_price}")
-        # # print(f"Current total supply in next step: {self.current_total_supply}")
-        # print(f"Import in this ending step {self.current_total_import}")
-        # # print(f"Export in this ending step {self.current_total_export}")
-        # # print(f"Total local sold: ", self.total_local_bought)
-        # # time.sleep(0.1)
-        # print(f"Penalized amount: {self.penalized_amount}")
-        # print(f"The cap limit for the ending step: {prev_cap_limit}")
-        # print(f"The cap limit for the coming step: {self.current_cap_limit}")
-        # # print(f"The budget balance: {self.budget_balance}")
-        # time.sleep(1)
-        # print(f"Marginal net loss: {marginal_netloss}")
-
-        next_cap_limits_obs = np.divide(next_cap_limits, self.all_max_daily_demand, dtype=np.float32)
+        next_cap_limits_obs = np.divide(next_cap_limits, self.obs_norm_factor, dtype=np.float32)
 
         observation = {
             "observations":
@@ -569,36 +547,41 @@ class StrategicCommunityMediator(ph.StrategicAgent):
                     [
                         # hr_idx / 24,
                         # month / 12,
-                        prev_price / max_price,
-                        self.current_local_price / max_price,
-                        self.feedin_price / max_price,
-                        self.current_grid_price / max_price,
-                        self.budget_balance / 50000, # this observation can go negative
-                        normed_budget_balance, # this observation can go negative
-                        self.current_total_supply / self.all_max_daily_demand,
-                        self.current_total_prod / self.all_max_daily_demand,
-                        self.current_total_load / self.all_max_daily_demand,
-                        self.current_total_import / self.all_max_daily_demand,
-                        self.current_total_export / self.all_max_daily_demand,
-                        self.current_cap_limit / self.all_max_daily_demand,
-                        self.penalized_amount / self.all_max_daily_demand,
-                        prev_cap_limit / self.all_max_daily_demand,
-                        self.prosumers_netloss / 50000, # this observation can go negative
-                        self.mediator_netloss / 50000, # this observation can go negative
+                        prev_price / max_price, # 0
+                        self.current_local_price / max_price,  #1
+                        self.feedin_price / max_price, # 2
+                        self.current_grid_price / max_price, #  3
+                        #self.budget_balance / 50000, # this observation can go negative 
+                        #normed_budget_balance, # this observation can go negative
+                        self.current_total_supply / self.obs_norm_factor, # 4
+                        self.current_total_prod / self.obs_norm_factor, # 5
+                        self.current_total_load / self.obs_norm_factor, # 6
+                        self.current_total_import / self.obs_norm_factor, # 7
+                        self.current_total_export / self.obs_norm_factor, # 8
+                        self.current_cap_limit / self.obs_norm_factor, # 9
+                        self.penalized_amount / self.obs_norm_factor, # 10
+                        prev_cap_limit / self.obs_norm_factor, # 11
+                        self.prosumers_netloss / 100000, # 12 this observation can go negative
+                        self.mediator_netloss / 100000, # 13 this observation can go negative
                     ],
                     dtype=np.float32),
                 "action_mask" : np.ones(50, dtype=np.float32)
             }
         
+        # # Check if any values in the observation array are outside the range [-1, 1]
+        out_of_bounds_indices = []
+        out_of_bounds_indices = np.where((observation['observations'] < -1) | (observation['observations'] > 1))[0]
+        if len(out_of_bounds_indices) > 0:
+            print("--------WARNING-----------")
+            print(f"Out of bounds values at indices: {out_of_bounds_indices}")
+            print("----------OBSERVATION---------")
+            print(observation['observations'])
+    
         observation['observations'] = np.concatenate((observation['observations'], next_cap_limits_obs))
         np.clip(observation['observations'], -1, 1, out=observation['observations'])
 
-
         #print(f"Observation: {observation}")
         return observation
-    
-
-
     
     
     def reset(self):
@@ -641,7 +624,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         # TODO: Let's see what happens if max price is doubled
         self.max_price = self.max_price * 2
         self.prices = np.linspace(0.1, self.max_price, num=50)
-        random.seed(time.time())
+        # random.seed(time.time())
         # self.cycles = random.randint(4, 11)
         # self.displacement = random.randint(1, 7)
         # self.squeeze = random.randint(1, 2)
@@ -1039,17 +1022,11 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             # Sell from battery and possible surplus production
             deficit = abs(min(self.current_supply, 0))
             surplus = max(self.current_supply, 0)
-            sell_amount = min(self.max_batt_discharge + self.current_supply, self.type.maxsell + surplus)
+            sell_amount = self.type.maxsell + surplus
             self.self_consumption += deficit
-            # print(f"-------- Selling from battery for Agent {self.id} STEP {ctx.env_view.current_step} --------")
-            # print("Deficit: ", deficit)
-            # print("Surplus: ", surplus)
-            # print("Sell amount: ", sell_amount)
-            # print("Discharge amount: ", sell_amount-surplus)
-            # time.sleep(2)
-            if sell_amount > 0:
+            if sell_amount > 0 and self.type.maxsell+deficit <= self.max_batt_discharge:
                 msgs.extend(self.sell_power(sell_amount))
-                self.discharge_battery(sell_amount-surplus+deficit)
+                self.discharge_battery(sell_amount+deficit)
                 return msgs
             else:
                 print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
@@ -1190,7 +1167,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         else:
             sell = 1
         # Can agent sell its charge?
-        if self.max_batt_discharge > abs(min(self.current_supply, 0)):
+        if self.max_batt_discharge >= self.type.maxsell+abs(min(self.current_supply, 0)):
             sell_batt = 1
         else: 
             sell_batt = 0
@@ -1288,9 +1265,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Update current own supply
         self.current_supply = round(self.current_prod - self.current_load, 2)
         # Reset battery charge
-        #self.current_charge = self.battery_cap / 2
-        random.seed(time.time())
-        self.current_charge = random.uniform(0, self.battery_cap)
+        self.current_charge = self.battery_cap / 2
+        # random.seed(time.time())
+        # self.current_charge = random.uniform(0, self.battery_cap)
         # Reset battery constraints
         self.utility_prev = 0
         # Update battery constraints

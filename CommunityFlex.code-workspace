@@ -10,6 +10,9 @@
 		},
 		{
 			"path": "../Phantom_dev/Phantom_dev"
+		},
+		{
+			"path": "../../anaconda3/envs/phantom/lib/python3.8/site-packages/ray/rllib/examples"
 		}
 	],
 	"settings": {}

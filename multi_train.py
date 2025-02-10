@@ -27,7 +27,7 @@ NUM_EPISODE_STEPS = 8735*2
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
-no_agents = 14
+no_agents = 5
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
@@ -75,6 +75,7 @@ metrics["CM/max_reward"] = ph.metrics.SimpleAgentMetric("CM", "max_reward")
 metrics["CM/min_reward"] = ph.metrics.SimpleAgentMetric("CM", "min_reward")
 metrics["CM/max_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "max_marg_netloss")
 metrics["CM/min_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "min_marg_netloss")
+metrics["CM/current_cap_limit"] = ph.metrics.SimpleAgentMetric("CM", "current_cap_limit")
 
 for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
@@ -208,15 +209,18 @@ if sys.argv[1] == "train":
         )
         policies = {"prosumer_policy": strategic_prosumers}
 
+
     ##############
     # Copy setup
     ##############
     if setup_type == 'copy':
-        rollout_length=4
+        rollout_length=5
         agent_supertypes.update(
             {
                 aid : SimpleProsumerAgent.Supertype(
-                    capacity = 0,
+                    capacity =0,
+                    eta=0,
+                    greed=0.75,
                     rollout=0
                 )    
                 for aid in simple_agents
@@ -226,7 +230,7 @@ if sys.argv[1] == "train":
             {
                 aid : StrategicProsumerAgent.Supertype(
                     capacity = UniformIntSampler(1, 4),
-                    eta=0,
+                    eta=0.05,
                     price_multiplier=2,
                     rollout=0,
                     maxbuy=1,
@@ -239,12 +243,14 @@ if sys.argv[1] == "train":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=1,
-                    cap_var=0.5,
-                    dso_penalty=15,
+                    cap_var=1,
+                    dso_penalty=75,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
                     rollout_length=rollout_length,
                     rollout=1, # 1 to deactivate resets of netloss
+                    reward_scale=1000,
+                    no_agents=no_agents
                     # range for langrange multiplier to update through training?
                 )    
             }
@@ -259,6 +265,8 @@ if sys.argv[1] == "train":
             "mediator_policy": ["CM"]
         }
 
+    num_workers = int(sys.argv[3])
+
     ph.utils.rllib.train(
         algorithm="PPO",
         env_class=StackelbergRewardDelayEnv,
@@ -272,22 +280,23 @@ if sys.argv[1] == "train":
         rllib_config={
             "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.0001,
+            #"entropy_coeff_schedule": [[0, 0.8], [pow(10, 6), 0.05]],
             "entropy_coeff": 0.1,
             "lambda": 0.98,
             "gamma": 0.998,
-            #"grad_clip": 7.6,
+            "grad_clip": 10,
             #"value_loss_coeff": 0.24,qs
-            "rollout_fragment_length": 48*rollout_length,
+            "rollout_fragment_length": 48*4,
             "num_sgd_iter": 5,
-            "train_batch_size": NUM_EPISODE_STEPS*4,
+            "train_batch_size": NUM_EPISODE_STEPS*num_workers,
             "sgd_minibatch_size": int(NUM_EPISODE_STEPS),
         },
         iterations=300,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
-        num_workers=4,
-        results_dir="~/ray_results/new_multi",
+        num_workers=num_workers,
+        results_dir="~/ray_results/new_multi_2",
     )
 
 # This is used for simple runs, fx debugging locked states.

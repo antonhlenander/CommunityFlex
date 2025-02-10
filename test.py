@@ -11,20 +11,23 @@ daily_residual_demand = [5,5,5,5,5]
 
 dm = DataManager()
 
-total_demand = dm.get_agent_summed_demand("H2")
+agent_list = ["H1", "H2", "H3", "H4", "H5"]
+
+demand_df = dm.demand_df
+
+max_demand = 0
+
+# print(demand_df)
+
+print(dm.get_all_maxdemand())
 
 
+# for i in range(24):
+#     hour_demand = 0
+#     for agent in agent_list:
+#         hour_demand += demand_df[agent].iloc[i]
+#     print(hour_demand)
 
-def compute_capacity_limitation():
-    max_price = np.max(daily_prices)
-    min_price = np.min(daily_prices)
-    mid_price = (max_price + min_price)/2
-    avg_cap = residual_demand/24
-    prices = np.array(daily_prices)
-    capacity_limitation = avg_cap - var * avg_cap * 2 * (prices - mid_price) / (max_price - min_price)
-    return capacity_limitation
+#     max_demand = max(max_demand, hour_demand)
 
-
-daily_caps = np.divide(daily_residual_demand, residual_demand)
-
-print(daily_caps)
+# print("max demand:", max_demand)

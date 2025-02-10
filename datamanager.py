@@ -81,6 +81,16 @@ class DataManager:
         max = self.demand_df[aid].max()
         return max
     
+    def get_max_hourly_demand(self, agent_list):
+        max_demand = 0
+        for i in range(24):
+            hour_demand = 0
+            for agent in agent_list:
+                hour_demand += self.demand_df[agent].iloc[i]
+            max_demand = max(max_demand, hour_demand)
+
+        return max_demand
+    
     def get_all_maxdemand(self):
         max = self.demand_df.max().max()
         return max
@@ -94,7 +104,6 @@ class DataManager:
         max_demand = self.demand_df.sum(axis=0).sum()
         return max_demand
 
-    
     def get_agent_maxproduction(self, aid):
         return self.prod_df[aid].max()
     

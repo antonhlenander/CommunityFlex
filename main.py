@@ -151,12 +151,14 @@ if sys.argv[1] == "train":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=1,
-                    cap_var=1,
-                    dso_penalty=15,
+                    cap_var=0.5,
+                    dso_penalty=5,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
                     rollout_length=rollout_length,
                     rollout=1, # 1 to deactivate resets of netloss
+                    reward_scale=100,
+                    no_agents=no_agents
                     # range for langrange multiplier to update through training?
                 )    
             }
@@ -170,8 +172,7 @@ if sys.argv[1] == "train":
             "prosumer_policy": strategic_prosumers,
             "mediator_policy": ["CM"]
         }
-
-
+        
     ##############
     # Copy setup
     ##############
@@ -181,7 +182,7 @@ if sys.argv[1] == "train":
             {
                 aid : SimpleProsumerAgent.Supertype(
                     capacity = 0,
-                    eta=0.1,
+                    eta=0,
                     greed=0.75,
                     rollout=0
                 )    
@@ -192,9 +193,11 @@ if sys.argv[1] == "train":
             {
                 aid : StrategicProsumerAgent.Supertype(
                     capacity = UniformIntSampler(1, 4),
-                    #capacity = 2,
-                    eta=UniformFloatSampler(eta, eta),
-                    rollout=0
+                    eta=0.05,
+                    price_multiplier=2,
+                    rollout=0,
+                    maxbuy=1,
+                    maxsell=1
                 )    
                 for aid in strategic_prosumers
             }
@@ -203,12 +206,14 @@ if sys.argv[1] == "train":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=1,
-                    cap_var=0.8,
-                    dso_penalty=15,
+                    cap_var=1,
+                    dso_penalty=75,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
                     rollout_length=rollout_length,
                     rollout=1, # 1 to deactivate resets of netloss
+                    reward_scale=100,
+                    no_agents=no_agents
                     # range for langrange multiplier to update through training?
                 )    
             }
@@ -223,7 +228,6 @@ if sys.argv[1] == "train":
             "mediator_policy": ["CM"]
         }
 
-    
     if setup_type == 'multsing':
         agent_supertypes.update(
             {
@@ -240,7 +244,8 @@ if sys.argv[1] == "train":
             {
                 aid : StrategicProsumerAgent.Supertype(
                     capacity = UniformIntSampler(1, 4),
-                    eta=0,
+                    eta=0.05,
+                    price_multiplier=1,
                     rollout=0,
                     maxbuy=1,
                     maxsell=1
@@ -280,14 +285,14 @@ if sys.argv[1] == "train":
             "rollout_fragment_length": 48,
             "num_sgd_iter": 10,
             "train_batch_size": NUM_EPISODE_STEPS*4,
-            "sgd_minibatch_size": int(NUM_EPISODE_STEPS*4/10),
+            "sgd_minibatch_size": int(NUM_EPISODE_STEPS),
         },
         iterations=300,
         checkpoint_freq=1,
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir="~/ray_results/single_policy_new",
+        results_dir="~/ray_results/single_policy_new2",
     )
 
 # This is used for simple runs, fx debugging locked states.
