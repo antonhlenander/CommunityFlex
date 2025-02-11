@@ -23,7 +23,7 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 8735*2
+NUM_EPISODE_STEPS = 8736*2
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
@@ -181,7 +181,7 @@ if sys.argv[1] == "train":
             {
                 aid : SimpleProsumerAgent.Supertype(
                     capacity = 0,
-                    eta=0.1,
+                    eta=0.2,
                     greed=0.75,
                     rollout=0
                 )    
@@ -203,7 +203,7 @@ if sys.argv[1] == "train":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=1,
-                    cap_var=0.8,
+                    cap_var=1,
                     dso_penalty=15,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
@@ -240,7 +240,7 @@ if sys.argv[1] == "train":
             {
                 aid : StrategicProsumerAgent.Supertype(
                     capacity = UniformIntSampler(1, 4),
-                    eta=0,
+                    eta=0.2,
                     rollout=0,
                     maxbuy=1,
                     maxsell=1
@@ -272,12 +272,12 @@ if sys.argv[1] == "train":
         rllib_config={
             "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.0001,
-            "entropy_coeff": 0.02,
+            "entropy_coeff": 0.025,
             "lambda": 0.98,
             "gamma": 0.998,
             #"grad_clip": 7.6,
-            #"value_loss_coeff": 0.24,q
-            "rollout_fragment_length": 48,
+            "vf_loss_coeff": 0.05,
+            "rollout_fragment_length": 48*4,
             "num_sgd_iter": 10,
             "train_batch_size": NUM_EPISODE_STEPS*4,
             "sgd_minibatch_size": int(NUM_EPISODE_STEPS*4/10),
@@ -287,7 +287,7 @@ if sys.argv[1] == "train":
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir="~/ray_results/single_policy_new",
+        results_dir="~/ray_results/single_policy_multidiscrete",
     )
 
 # This is used for simple runs, fx debugging locked states.
