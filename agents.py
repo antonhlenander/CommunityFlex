@@ -1226,7 +1226,8 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                     self.current_load / self.norm_factor,
                     self.current_prod / self.norm_factor,
                     self.current_supply / self.norm_factor,
-                    self.current_charge / self.type.capacity,
+                    self.current_charge / self.battery_cap, # type variable
+                    #self.current_charge / self.all_max_cap,
                     self.battery_cap / self.all_max_cap, # type variable
                     #self.charge_rate / self.all_max_cap, # ONLY FOR EVAL OLD POLICY
                     self.acc_local_market_coin / self.acc_norm_factor,
