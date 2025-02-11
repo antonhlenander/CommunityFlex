@@ -152,7 +152,7 @@ if sys.argv[1] == "rollout":
                     eta=0.2,
                     price_multiplier=2,
                     rollout=1,
-                    maxbuy=0.5,
+                    maxbuy=0.7,
                     maxsell=1
                 )    
                 for aid in strategic_prosumers
@@ -174,7 +174,7 @@ if sys.argv[1] == "rollout":
         )
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/new_multi_2/eta0.2/",
+        directory="~/ray_results/new_multi_2/maxbuy0.7_eta0.2/",
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
@@ -192,7 +192,7 @@ if sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/new_multi_eta0.2/"
+    path = f"output/new_multi_maxbuy0.7_eta0.2/"
     if not os.path.exists(path):
         os.makedirs(path)
 

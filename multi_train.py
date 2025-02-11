@@ -171,7 +171,7 @@ if sys.argv[1] == "train":
                     eta=0.2,
                     price_multiplier=2,
                     rollout=0,
-                    maxbuy=0.5,
+                    maxbuy=0.7,
                     maxsell=1
                 )    
                 for aid in strategic_prosumers
