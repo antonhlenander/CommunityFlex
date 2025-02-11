@@ -24,7 +24,7 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 8640
+NUM_EPISODE_STEPS = 8736
 rotate = False
 no_agents = 5
 setup_type = sys.argv[2]

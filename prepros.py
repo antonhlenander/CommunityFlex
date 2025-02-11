@@ -85,5 +85,15 @@ def load_cap_data(cap_path):
     cap_df = pd.read_csv(cap_path, delimiter=";", header=0)
     return cap_df
 
-df = load_price_data(price_path)
-print(df.head())
+
+# df = load_production_data(prod_path)
+# print(df.head())
+
+# #Check for missing hours in the 'time' column
+# expected_hours = pd.date_range(start='2019-01-01', end='2019-12-31 23:00:00', freq='H')
+# missing_hours = expected_hours.difference(df['time'])
+
+# if not missing_hours.empty:
+#     print(f"Missing hours: {missing_hours}")
+# else:
+#     print("No missing hours found.")

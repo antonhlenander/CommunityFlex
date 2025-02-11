@@ -149,7 +149,7 @@ if sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 aid : StrategicProsumerAgent.Supertype(
-                    eta=0.05,
+                    eta=0.2,
                     price_multiplier=2,
                     rollout=1,
                     maxbuy=0.5,
@@ -174,7 +174,7 @@ if sys.argv[1] == "rollout":
         )
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/new_multi_2/LATEST",
+        directory="~/ray_results/new_multi_2/eta0.2/",
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
@@ -184,7 +184,7 @@ if sys.argv[1] == "rollout":
             'agent_supertypes': agent_supertypes,
         },
         explore=False,
-        num_repeats=1,
+        num_repeats=2,
         num_workers=1,
         metrics=metrics,
         #custom_policy_mapping=custom_policy_mapping
@@ -192,7 +192,7 @@ if sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/new_multi_3/"
+    path = f"output/new_multi_eta0.2/"
     if not os.path.exists(path):
         os.makedirs(path)
 

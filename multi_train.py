@@ -168,7 +168,7 @@ if sys.argv[1] == "train":
             {
                 aid : StrategicProsumerAgent.Supertype(
                     capacity = UniformIntSampler(1, 4),
-                    eta=0.05,
+                    eta=0.2,
                     price_multiplier=2,
                     rollout=0,
                     maxbuy=0.5,
@@ -205,7 +205,8 @@ if sys.argv[1] == "train":
     num_workers = int(sys.argv[3])
 
     train_from_checkpoint.train(
-        policy_checkpoint="/Users/antonlenander/ray_results/single_policy_new/eta0.1_new_allfixed/checkpoint_000034/policies/prosumer_policy",
+        policy_checkpoint="/Users/antonlenander/ray_results/single_policy_new/eta0.2_newest_allfixed/checkpoint_000038/policies/prosumer_policy",
+        #policy_checkpoint="/Users/antonlenander/ray_results/single_policy_new/eta0.1_new_allfixed/checkpoint_000034/policies/prosumer_policy",
         algorithm="PPO",
         env_class=StackelbergRewardDelayEnv,
         env_config={
