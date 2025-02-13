@@ -942,7 +942,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 # Can include type here as well in the future maybe
                 "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float32),
 
-                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(9+24,), dtype=np.float32),
+                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(8+24,), dtype=np.float32),
             }
         )
 
@@ -1215,26 +1215,25 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         prods = np.array([self.dm.get_agent_production(self.id, step)*self.type.capacity for step in range (sim_step+1, sim_step+25)], dtype=np.float32)
         # Update current own supply
         supplies = loads - prods
-        loads = loads / self.norm_factor
-        prods = prods / self.norm_factor
-        supplies = supplies / self.norm_factor
+        # loads = loads / self.all_max_cap
+        # prods = prods / self.all_max_cap
+        supplies = supplies / self.all_max_cap
 
         observation = {
             'observations' : np.array([
                     #self.hour / 24,
                     self.current_local_price / self.max_price,
-                    self.current_load / self.norm_factor,
-                    self.current_prod / self.norm_factor,
-                    self.current_supply / self.norm_factor,
-                    self.current_charge / self.battery_cap, # type variable
+                    self.current_load / self.all_max_cap,
+                    self.current_prod / self.all_max_cap,
+                    self.current_supply / self.all_max_cap,
+                    self.current_charge / self.all_max_cap, # type variable
                     #self.current_charge / self.all_max_cap,
                     self.battery_cap / self.all_max_cap, # type variable
                     #self.charge_rate / self.all_max_cap, # ONLY FOR EVAL OLD POLICY
                     self.acc_local_market_coin / self.acc_norm_factor,
                     self.acc_local_market_cost / self.acc_norm_factor,
-                    self.acc_grid_interactions / 8760], 
-                    dtype=np.float32
-                    ),
+                    #self.acc_grid_interactions / 8760
+                    ], dtype=np.float32),
             'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float32)
         }
 
