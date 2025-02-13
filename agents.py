@@ -1185,7 +1185,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         else:
             sell = 1
         # Can agent sell its charge?
-        if self.max_batt_discharge > abs(min(self.current_supply, 0)):
+        if self.max_batt_discharge >= self.type.maxsell+abs(min(self.current_supply, 0)):
             sell_batt = 1
         else: 
             sell_batt = 0
