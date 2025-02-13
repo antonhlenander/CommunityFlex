@@ -942,7 +942,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 # Can include type here as well in the future maybe
                 "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float32),
 
-                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(22+1+6,), dtype=np.float32),
+                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(9+24,), dtype=np.float32),
             }
         )
 
@@ -1210,9 +1210,9 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         # Convert to hours since demand profile is just 24 hours
         hour = sim_step % 24
         # Update current load only
-        loads = np.array([self.dm.get_agent_demand(self.id, h%24) for h in range(hour+1, hour+7)], dtype=np.float32)
+        loads = np.array([self.dm.get_agent_demand(self.id, h%24) for h in range(hour+1, hour+25)], dtype=np.float32)
         # Update production
-        prods = np.array([self.dm.get_agent_production(self.id, step)*self.type.capacity for step in range (sim_step+1, sim_step+7)], dtype=np.float32)
+        prods = np.array([self.dm.get_agent_production(self.id, step)*self.type.capacity for step in range (sim_step+1, sim_step+25)], dtype=np.float32)
         # Update current own supply
         supplies = loads - prods
         loads = loads / self.norm_factor
@@ -1232,11 +1232,13 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                     #self.charge_rate / self.all_max_cap, # ONLY FOR EVAL OLD POLICY
                     self.acc_local_market_coin / self.acc_norm_factor,
                     self.acc_local_market_cost / self.acc_norm_factor,
-                    self.acc_grid_interactions / 8760], dtype=np.float32),
+                    self.acc_grid_interactions / 8760], 
+                    dtype=np.float32
+                    ),
             'action_mask' : np.array([buy, buy_charge, sell, sell_batt, charge, noop], dtype=np.float32)
         }
 
-        observation['observations'] = np.concatenate((observation['observations'], self.id_vector), dtype=np.float32)
+        #observation['observations'] = np.concatenate((observation['observations'], self.id_vector), dtype=np.float32)
         observation['observations'] = np.concatenate((observation['observations'], supplies), dtype=np.float32)
 
         np.clip(observation['observations'], -1, 1, out=observation['observations'])
@@ -1311,7 +1313,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.all_max_cap = 15
         self.max_price = self.dm.get_all_max_price() + 2.0666
         self.max_price = self.max_price * self.type.price_multiplier
-        self.reward_norm_factor = self.norm_factor * self.max_price + self.charge_rate * self.max_price
+        self.reward_norm_factor = self.norm_factor * self.max_price + self.charge_rate * self.max_price + 5
         self.acc_norm_factor = self.dm.get_agent_daily_demand(self.id)*self.max_price
         self.acc_norm_factor = np.sum(self.acc_norm_factor)*365
 
