@@ -1039,22 +1039,17 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             # Sell from battery and possible surplus production
             deficit = abs(min(self.current_supply, 0))
             surplus = max(self.current_supply, 0)
-            sell_amount = min(self.max_batt_discharge + self.current_supply, self.type.maxsell + surplus)
+            sell_amount = self.type.maxsell + surplus
             self.self_consumption += deficit
-            # print(f"-------- Selling from battery for Agent {self.id} STEP {ctx.env_view.current_step} --------")
-            # print("Deficit: ", deficit)
-            # print("Surplus: ", surplus)
-            # print("Sell amount: ", sell_amount)
-            # print("Discharge amount: ", sell_amount-surplus)
-            # time.sleep(2)
-            if sell_amount > 0:
+            if sell_amount > 0 and self.type.maxsell+deficit <= self.max_batt_discharge:
                 msgs.extend(self.sell_power(sell_amount))
-                self.discharge_battery(sell_amount-surplus+deficit)
+                self.discharge_battery(sell_amount+deficit)
                 return msgs
             else:
                 print("WARNING!!!! INVALID ACTIONS!!! CHECK ACTION MASKING!!!!")
                 print("ACTION 3: AGENT SELLS WITH NEGATIVE SUPPLY")
                 return msgs
+        
         
         elif action == 4:
             # Charge battery
