@@ -677,6 +677,7 @@ class SimpleCommunityMediator(ph.Agent):#
     class Supertype(ph.Supertype):
         discount: float = 0.5
         std_dev: float = 0
+        dso_penalty: int = 75
 
     @dataclass(frozen=True)
     class MediatorView(ph.AgentView):
@@ -690,9 +691,25 @@ class SimpleCommunityMediator(ph.Agent):#
         super().__init__(agent_id)
 
         self.dm: DataManager = dm
+        self.dso = DSO(dm)
 
         self.import_tariffs = [0.2296,0.2296,0.2296,0.2296,0.2296,0.2296,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,0.6889,2.0666,2.0666,2.0666,2.0666,0.6889,0.6889,0.6889]
         self.export_tariff = 0.00375 + 0.000875 + 0.01
+
+        # Currents
+        self.current_grid_price: float = 0 # Spot price + import tariff
+        self.current_local_price: float = 0 # Dynamic price set by agent
+        self.feedin_price: float = 0 # Spot price - export tariff
+        self.current_local_tariff: float = 0 # Discounted import tariff
+    
+        self.price_array: list = []
+
+        # Cap limit variables
+        self.yearly_cap_limits: list = []
+        self.next_residual_demand: float
+        self.current_cap_limit: float = 0
+        self.capacity_balance: float = 0
+
 
         self.daily_prices: list = []
         # Store the current prices
@@ -719,6 +736,18 @@ class SimpleCommunityMediator(ph.Agent):#
             current_feedin_price = self.current_feedin_price,
             discount = self.type.discount
             )
+    
+    def pre_message_resolution(self, ctx: ph.Context) -> None:
+        step = ctx.env_view.current_step
+        sim_step = (step + 1) // 2
+        day = (sim_step // 24)
+
+        if step == 0:
+            self.dso.agents_init(ctx)
+            self.yearly_cap_limits = self.dso.compute_yearly_capacity_limits(self.type.cap_var, ctx)
+            self.yearly_cap_limits.extend([10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10])
+        
+    
     def generate_messages(self, ctx):
         if ctx.env_view.current_step % 2 == 1:
             msgs = []
@@ -732,17 +761,15 @@ class SimpleCommunityMediator(ph.Agent):#
 
 
     def post_message_resolution(self, ctx: ph.Context) -> None:
-        # Update grid price on even steps since this carries over to the next hour which begins on odd steps
-        if ctx.env_view.current_step % 2 == 0: # This really is unnecessary if we only access index, but if we update something else it's probably not that simple
-            # Integer division taking into account odd and even steps
+        if ctx.env_view.current_step % 2 == 0: 
             sim_step = (ctx.env_view.current_step + 1) // 2
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
-            #price = self.current_grid_price
-            #noise = np.random.normal(1, self.type.std_dev)
-            #self.current_local_price = self.current_grid_price#min(price*noise, self.max_price)
-            self.current_local_price = pow(self.current_grid_price, 2) * 0.3
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
-            #print(f"Simple mediator updated prices: {self.current_grid_price}, {self.current_local_price}, {self.current_feedin_price}")
+
+            self.current_cap_limit = self.yearly_cap_limits[sim_step]
+            next_cap_limits = self.yearly_cap_limits[sim_step+1:sim_step+25]
+
+
 
     def reset(self):
         super().reset()
@@ -752,6 +779,7 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_feedin_price = self.price_array[0] - self.export_tariff
         self.max_price = self.dm.get_all_max_price() + 2.0666
         self.max_price = self.max_price
+ 
         
 
     def handle_batch(
@@ -789,7 +817,7 @@ class SimpleCommunityMediator(ph.Agent):#
             encoded_sell_bids.append(tuple)
 
         # CLEAR BIDS
-        cleared_buy_bids, cleared_sell_bids = Market.market_clearing(
+        cleared_buy_bids, cleared_sell_bids, total_demand, total_supply = Market.market_clearing(
             buy_bids=encoded_buy_bids, 
             sell_bids=encoded_sell_bids,
             local_price=self.current_local_price,
@@ -802,9 +830,23 @@ class SimpleCommunityMediator(ph.Agent):#
         msgs = []
         self.current_total_import = 0
         self.current_total_export = 0
+        
+        if total_demand > total_supply:
+            self.current_total_import = total_demand - total_supply
+            self.penalized_amount = max(0, self.current_total_import - self.current_cap_limit)
+            # Avoid division by zero
+            if self.current_total_import > 0:
+                self.penalty_fraction = self.penalized_amount / self.current_total_import
+            else:
+                total_penalty = 0
+
         # Create messages for the cleared buy bids
         for cleared_buy_bid in cleared_buy_bids:
             buyer_id, buy_amount, local_amount, grid_amount, prosumer_cost, mediator_cost = cleared_buy_bid
+            # Implement penalty logic here
+            prosumer_penalized_amount = grid_amount * self.penalty_fraction
+            prosumer_cost = buy_amount * self.current_grid_price + prosumer_penalized_amount * self.dso_penalty
+
             msgs.append(
                 (
                     buyer_id,
