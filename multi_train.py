@@ -205,7 +205,7 @@ if sys.argv[1] == "train":
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=1,
                     cap_var=1,
-                    dso_penalty=75,
+                    dso_penalty=50,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
                     rollout_length=rollout_length,
@@ -254,7 +254,7 @@ if sys.argv[1] == "train":
             {
                 "CM": SimpleCommunityMediator.Supertype(
                     #discount=UniformFloatSampler(0.2, 1),
-                    dso_penalty=75,
+                    dso_penalty=50,
                     discount=0,
                     cap_var=1,
                     #std_dev=UniformFloatSampler(0.0, 0.0)
