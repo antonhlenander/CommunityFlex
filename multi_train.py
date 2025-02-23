@@ -239,8 +239,8 @@ if sys.argv[1] == "train":
             {
                 f"CM": StrategicCommunityMediator.Supertype(
                     discount=1,
-                    cap_var=0.5,
-                    dso_penalty=15,
+                    cap_var=1,
+                    dso_penalty=75,
                     lagrange_mult=0, # 0 for penalty objective, 1 for budget balance objective
                     lagrange_lr=0,
                     rollout_length=rollout_length,

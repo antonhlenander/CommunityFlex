@@ -845,7 +845,7 @@ class SimpleCommunityMediator(ph.Agent):#
             buyer_id, buy_amount, local_amount, grid_amount, prosumer_cost, mediator_cost = cleared_buy_bid
             # Implement penalty logic here
             prosumer_penalized_amount = grid_amount * self.penalty_fraction
-            prosumer_cost = buy_amount * self.current_grid_price + prosumer_penalized_amount * self.dso_penalty
+            prosumer_cost = buy_amount * self.current_grid_price + prosumer_penalized_amount * self.type.dso_penalty
 
             msgs.append(
                 (
