@@ -678,6 +678,7 @@ class SimpleCommunityMediator(ph.Agent):#
         discount: float = 0
         std_dev: float = 0
         dso_penalty: int = 75
+        cap_var: int = 1
 
     @dataclass(frozen=True)
     class MediatorView(ph.AgentView):
@@ -710,7 +711,6 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_cap_limit: float = 0
         self.capacity_balance: float = 0
 
-
         self.daily_prices: list = []
         # Store the current prices
         self.current_grid_price: float
@@ -742,10 +742,10 @@ class SimpleCommunityMediator(ph.Agent):#
         sim_step = (step + 1) // 2
         day = (sim_step // 24)
 
-        if step == 0:
+        if step == 1:
             self.dso.agents_init(ctx)
             self.yearly_cap_limits = self.dso.compute_yearly_capacity_limits(self.type.cap_var, ctx)
-            self.yearly_cap_limits.extend([10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10])
+            self.yearly_cap_limits.extend([10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10])
         
     
     def generate_messages(self, ctx):
@@ -764,8 +764,8 @@ class SimpleCommunityMediator(ph.Agent):#
         if ctx.env_view.current_step % 2 == 0: 
             sim_step = (ctx.env_view.current_step + 1) // 2
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
+            self.current_local_price = self.current_grid_price
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
-
             self.current_cap_limit = self.yearly_cap_limits[sim_step]
             next_cap_limits = self.yearly_cap_limits[sim_step+1:sim_step+25]
 
@@ -834,13 +834,14 @@ class SimpleCommunityMediator(ph.Agent):#
         msgs = []
         self.current_total_import = 0
         self.current_total_export = 0
+        penalty_fraction = 0
         
         if total_demand > total_supply:
             self.current_total_import = total_demand - total_supply
             self.penalized_amount = max(0, self.current_total_import - self.current_cap_limit)
             # Avoid division by zero
             if self.current_total_import > 0:
-                self.penalty_fraction = self.penalized_amount / self.current_total_import
+                penalty_fraction = self.penalized_amount / self.current_total_import
             else:
                 total_penalty = 0
 
@@ -848,7 +849,7 @@ class SimpleCommunityMediator(ph.Agent):#
         for cleared_buy_bid in cleared_buy_bids:
             buyer_id, buy_amount, local_amount, grid_amount, prosumer_cost, mediator_cost = cleared_buy_bid
             # Implement penalty logic here
-            prosumer_penalized_amount = grid_amount * self.penalty_fraction
+            prosumer_penalized_amount = grid_amount * penalty_fraction
             prosumer_cost = buy_amount * self.current_grid_price + prosumer_penalized_amount * self.type.dso_penalty
 
             msgs.append(
@@ -1353,7 +1354,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.all_max_cap = 15
         self.max_price = self.dm.get_all_max_price() + 2.0666
         self.max_price = self.max_price * self.type.price_multiplier
-        self.reward_norm_factor = self.norm_factor * self.max_price + self.charge_rate * self.max_price + 5
+        self.reward_norm_factor = self.norm_factor * (self.max_price+75) + (self.charge_rate * self.max_price+75) + 5
         self.acc_norm_factor = self.dm.get_agent_daily_demand(self.id)*self.max_price
         self.acc_norm_factor = np.sum(self.acc_norm_factor)*365
 

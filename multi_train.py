@@ -23,14 +23,15 @@ import os
 ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskModel)
 
 # Params
-NUM_EPISODE_STEPS = 8735*2
+NUM_EPISODE_STEPS = 48*30
 eta = 0.1 # should this be trainable?
 greed = 0.8
 rotate = False
 no_agents = 14
 setup_type = sys.argv[2]
 
-dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
+#dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
+dm = DataManager(demand_path="data/august/demandprofiles.csv", prod_path="data/august/PV.csv", cap_path="data/eval/caps.csv")
 if setup_type == 'simple' or setup_type == 'multsing':
     mediator = SimpleCommunityMediator('CM', dm=dm)
 else:
@@ -63,18 +64,18 @@ metrics["env/total_supply"] = ph.metrics.AggregatedAgentMetric(follower_agents, 
 metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agents, "self_consumption", group_reduce_action="sum")
 metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
 metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
-metrics["CM/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
+#metrics["CM/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
 metrics["CM/penalized_amount"] = ph.metrics.SimpleAgentMetric("CM", "penalized_amount")
-metrics["CM/no_of_diff_actions"] = ph.metrics.SimpleAgentMetric("CM", "no_different_prices")
-metrics["CM/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
-metrics["CM/mediator_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_mediator_payments")
+#metrics["CM/no_of_diff_actions"] = ph.metrics.SimpleAgentMetric("CM", "no_different_prices")
+#metrics["CM/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
+#metrics["CM/mediator_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_mediator_payments")
 metrics["CM/prosumers_netloss"] = ph.metrics.SimpleAgentMetric("CM", "prosumers_netloss")
-metrics["CM/prosumers_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_prosumers_payments")
-metrics["CM/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
-metrics["CM/max_reward"] = ph.metrics.SimpleAgentMetric("CM", "max_reward")
-metrics["CM/min_reward"] = ph.metrics.SimpleAgentMetric("CM", "min_reward")
-metrics["CM/max_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "max_marg_netloss")
-metrics["CM/min_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "min_marg_netloss")
+#metrics["CM/prosumers_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_prosumers_payments")
+#metrics["CM/normed_balance"] = ph.metrics.SimpleAgentMetric("CM", "normed_balance")
+#metrics["CM/max_reward"] = ph.metrics.SimpleAgentMetric("CM", "max_reward")
+#metrics["CM/min_reward"] = ph.metrics.SimpleAgentMetric("CM", "min_reward")
+#metrics["CM/max_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "max_marg_netloss")
+#metrics["CM/min_marg_netloss"] = ph.metrics.SimpleAgentMetric("CM", "min_marg_netloss")
 
 for aid in (follower_agents):
     metrics[f"{aid}/net_loss"] = ph.metrics.SimpleAgentMetric(aid, "net_loss")
@@ -255,6 +256,7 @@ if sys.argv[1] == "train":
                     #discount=UniformFloatSampler(0.2, 1),
                     dso_penalty=75,
                     discount=0,
+                    cap_var=1,
                     #std_dev=UniformFloatSampler(0.0, 0.0)
                 )    
             }
@@ -292,52 +294,3 @@ if sys.argv[1] == "train":
         num_workers=4,
         results_dir="~/ray_results/single_policy_w_penalties",
     )
-
-# This is used for simple runs, fx debugging locked states.
-elif sys.argv[1] == "test":
-    # Define agent supertypes
-    agent_supertypes = {}
-    agent_supertypes.update(
-        {
-            f"H{i}": SimpleProsumerAgent.Supertype(
-                capacity=UniformIntSampler(1, 4),
-                greed=UniformFloatSampler(0.5, 1.0),
-                eta=UniformFloatSampler(eta, eta)
-
-            )    
-            for i in range(1, no_agents+1)
-        },
-    )
-
-    # Define environment
-    env = stackelberg_custom.StackelbergEnvCustom(
-        num_steps=NUM_EPISODE_STEPS, 
-        network=network,
-        leader_agents=leader_agents,
-        follower_agents=follower_agents,
-        agent_supertypes=agent_supertypes
-    )
-    
-    terminate = False
-    episodes = 0
-
-    while episodes < 10:
-        observations = env.reset()
-    
-        while env.current_step < env.num_steps:
-            actions = {
-                agent.id: agent.action_space.sample()
-                for agent in env.strategic_agents
-            }
-            # log simple agent actions?
-            # log messages?
-
-            # Manually pass termination bool
-            if env.current_step+1 == env.num_steps:
-                terminate = True
-
-            step = env.step(actions, terminate)
-            observations = step.observations
-            rewards = step.rewards
-            infos = step.infos
-        episodes += 1
