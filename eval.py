@@ -19,14 +19,15 @@ ModelCatalog.register_custom_model("torch_action_mask_model", TorchActionMaskMod
 
 
 # Params
-NUM_EPISODE_STEPS = 8735*2
+NUM_EPISODE_STEPS = 48*30
 eta = 0.1 # should this be trainable?
 greed = 0.75
 rotate = False
 no_agents = 14
 setup_type = sys.argv[2]
 
-dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/fullyearPV_singleDemand/demandprofiles.csv', cap_path='data/eval/caps.csv')
+#dm = DataManager(prod_path='data/eval/pv.csv', demand_path='data/fullyearPV_singleDemand/demandprofiles.csv', cap_path='data/eval/caps.csv')
+dm = DataManager(demand_path="data/august/demandprofiles.csv", prod_path="data/august/PV.csv", cap_path="data/eval/caps.csv")
 if setup_type == 'simple' or setup_type == 'multsing':
     mediator = SimpleCommunityMediator('CM', dm=dm)
 else:
@@ -263,10 +264,10 @@ elif sys.argv[1] == "rollout":
             {
                 aid : StrategicProsumerAgent.Supertype(
                     #capacity = UniformIntSampler(1, 4),
-                    eta=0.2,
+                    eta=0.0,
                     rollout=1,
-                    price_multiplier=1,
-                    maxbuy=1,
+                    price_multiplier=10,
+                    maxbuy=0.7,
                     maxsell=1
                 )    
                 for aid in strategic_prosumers
@@ -275,8 +276,9 @@ elif sys.argv[1] == "rollout":
         agent_supertypes.update(
             {
                 "CM": SimpleCommunityMediator.Supertype(
-                    #discount=UniformFloatSampler(0.2, 1),
-                    #std_dev=UniformFloatSampler(0.015, 0.1),
+                    discount=0,
+                    dso_penalty=50,
+                    cap_var=1,
                     #std_dev=UniformFloatSampler(0.0, 0.0)
                 )    
             }
@@ -285,7 +287,7 @@ elif sys.argv[1] == "rollout":
 
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/single_policy_new/eta0.2_24hobs_diffnorm/",
+        directory="~/ray_results/single_policy_w_penalties/LATEST/",
         #directory="~/ray_results/community_flex_singlepolicy/PPO_StackelbergRewardDelayEnv_2024-12-17_10-29-59a6rem3ul/",
         #directory='~/ray_results/single_policy_new/PPO_StackelbergRewardDelayEnv_2025-02-05_11-42-134musycil',
         #checkpoint=39,
@@ -306,7 +308,7 @@ elif sys.argv[1] == "rollout":
 
     results = list(results)
 
-    path = f"output/single_policy_new_eta0.2_24hobs_diffnorm/"
+    path = f"output/single_policy_w_penalties/"
     if not os.path.exists(path):
         os.makedirs(path)
 

@@ -226,7 +226,7 @@ if sys.argv[1] == "train":
 
 
     if setup_type == 'multsing':
-        rollout_length=1
+        rollout_length=4
         agent_supertypes.update(
             {
                 aid : SimpleProsumerAgent.Supertype(
@@ -242,7 +242,7 @@ if sys.argv[1] == "train":
             {
                 aid : StrategicProsumerAgent.Supertype(
                     capacity = UniformIntSampler(1, 4),
-                    eta=0,
+                    eta=0.2,
                     rollout=0,
                     maxbuy=0.7,
                     maxsell=1
