@@ -216,7 +216,7 @@ if sys.argv[1] == "rollout":
 
 
     results = ph.utils.rllib.rollout(
-        directory="~/ray_results/single_policy_w_penalties/LATEST/",
+        directory="/Users/antonlenander/ray_results/single_policy_w_penalties/PPO_StackelbergRewardDelayEnv_2025-02-23_21-51-09d5r5fngw/",
         env_class=StackelbergRewardDelayEnv,
         env_config={
             'num_steps': NUM_EPISODE_STEPS,
