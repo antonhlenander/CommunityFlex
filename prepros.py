@@ -49,7 +49,7 @@ def load_demand_profile(demand_path):
 
 def load_production_data(prod_path):
     print('Loading production data...')
-    df = pd.read_csv(prod_path, header=3)
+    df = pd.read_csv(prod_path)
     # Drop all irrelavant columns
     df = df[['time', 'electricity']]
     # Rename column

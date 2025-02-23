@@ -172,43 +172,6 @@ if sys.argv[1] == "train":
         }
 
 
-    
-    if setup_type == 'multsing':
-        agent_supertypes.update(
-            {
-                aid : SimpleProsumerAgent.Supertype(
-                    capacity = 0,
-                    eta=0,
-                    greed=0,
-                    rollout=0
-                )    
-                for aid in simple_agents
-            }
-        ) 
-        agent_supertypes.update(
-            {
-                aid : StrategicProsumerAgent.Supertype(
-                    capacity = UniformIntSampler(1, 4),
-                    eta=0,
-                    rollout=0,
-                    maxbuy=1,
-                    maxsell=1
-                )    
-                for aid in strategic_prosumers
-            }
-        ) 
-        agent_supertypes.update(
-            {
-                "CM": SimpleCommunityMediator.Supertype(
-                    #discount=UniformFloatSampler(0.2, 1),
-                    dso_penalty=75,
-                    discount=0,
-                    #std_dev=UniformFloatSampler(0.0, 0.0)
-                )    
-            }
-        )
-        policies = {"prosumer_policy": strategic_prosumers}
-
     ##############
     # Copy setup
     ##############
@@ -260,6 +223,45 @@ if sys.argv[1] == "train":
             "mediator_policy": ["CM"]
         }
 
+
+    if setup_type == 'multsing':
+        rollout_length=1
+        agent_supertypes.update(
+            {
+                aid : SimpleProsumerAgent.Supertype(
+                    capacity = 0,
+                    eta=0,
+                    greed=0,
+                    rollout=0
+                )    
+                for aid in simple_agents
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                aid : StrategicProsumerAgent.Supertype(
+                    capacity = UniformIntSampler(1, 4),
+                    eta=0,
+                    rollout=0,
+                    maxbuy=0.7,
+                    maxsell=1
+                )    
+                for aid in strategic_prosumers
+            }
+        ) 
+        agent_supertypes.update(
+            {
+                "CM": SimpleCommunityMediator.Supertype(
+                    #discount=UniformFloatSampler(0.2, 1),
+                    dso_penalty=75,
+                    discount=0,
+                    #std_dev=UniformFloatSampler(0.0, 0.0)
+                )    
+            }
+        )
+        policies = {"prosumer_policy": strategic_prosumers}
+
+
     ph.utils.rllib.train(
         algorithm="PPO",
         env_class=StackelbergRewardDelayEnv,
@@ -273,13 +275,13 @@ if sys.argv[1] == "train":
         rllib_config={
             "model": {"custom_model": "torch_action_mask_model"},
             "lr": 0.0001,
-            "entropy_coeff": 0.1,
+            "entropy_coeff": 0.025,
             "lambda": 0.98,
             "gamma": 0.998,
             #"grad_clip": 7.6,
             #"value_loss_coeff": 0.24,qs
             "rollout_fragment_length": 48*rollout_length,
-            "num_sgd_iter": 5,
+            "num_sgd_iter": 10,
             "train_batch_size": NUM_EPISODE_STEPS*4,
             "sgd_minibatch_size": int(NUM_EPISODE_STEPS),
         },
@@ -288,7 +290,7 @@ if sys.argv[1] == "train":
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir="~/ray_results/new_multi",
+        results_dir="~/ray_results/single_policy_w_penalties",
     )
 
 # This is used for simple runs, fx debugging locked states.
