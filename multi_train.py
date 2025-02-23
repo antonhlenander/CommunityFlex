@@ -201,7 +201,8 @@ if sys.argv[1] == "train":
             {
                 "CM": SimpleCommunityMediator.Supertype(
                     #discount=UniformFloatSampler(0.2, 1),
-                    std_dev=UniformFloatSampler(0.015, 0.1),
+                    dso_penalty=75,
+                    discount=0,
                     #std_dev=UniformFloatSampler(0.0, 0.0)
                 )    
             }
@@ -212,7 +213,7 @@ if sys.argv[1] == "train":
     # Copy setup
     ##############
     if setup_type == 'copy':
-        rollout_length=4
+        rollout_length=1
         agent_supertypes.update(
             {
                 aid : SimpleProsumerAgent.Supertype(
@@ -227,9 +228,9 @@ if sys.argv[1] == "train":
                 aid : StrategicProsumerAgent.Supertype(
                     capacity = UniformIntSampler(1, 4),
                     eta=0,
-                    price_multiplier=2,
+                    price_multiplier=10,
                     rollout=0,
-                    maxbuy=1,
+                    maxbuy=0.7,
                     maxsell=1
                 )    
                 for aid in strategic_prosumers

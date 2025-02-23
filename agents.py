@@ -675,7 +675,7 @@ class SimpleCommunityMediator(ph.Agent):#
 
     @dataclass
     class Supertype(ph.Supertype):
-        discount: float = 0.5
+        discount: float = 0
         std_dev: float = 0
         dso_penalty: int = 75
 
