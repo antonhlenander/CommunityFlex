@@ -779,6 +779,10 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_feedin_price = self.price_array[0] - self.export_tariff
         self.max_price = self.dm.get_all_max_price() + 2.0666
         self.max_price = self.max_price
+        self.penalized_amount = 0
+        self.mediator_netloss = 0
+        self.alltime_prosumers_payments = 0
+        self.prosumers_netloss = 0
  
         
 
