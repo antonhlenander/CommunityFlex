@@ -31,6 +31,8 @@ no_agents = 14
 setup_type = sys.argv[2]
 
 dm = DataManager(demand_path="data/fullyearPV_singleDemand/demandprofiles.csv", cap_path="data/eval/caps.csv")
+#dm = DataManager(demand_path="data/august/demandprofiles.csv", prod_path="data/august/PV.csv", cap_path="data/eval/caps.csv")
+
 if setup_type == 'simple' or setup_type == 'multsing':
     mediator = SimpleCommunityMediator('CM', dm=dm)
 else:
@@ -240,6 +242,9 @@ if sys.argv[1] == "train":
         agent_supertypes.update(
             {
                 "CM": SimpleCommunityMediator.Supertype(
+                    cap_var=1,
+                    discount=0,
+                    dso_penalty=50,
                     #discount=UniformFloatSampler(0.2, 1),
                     std_dev=UniformFloatSampler(0.015, 0.1),
                     #std_dev=UniformFloatSampler(0.0, 0.0)
@@ -276,7 +281,7 @@ if sys.argv[1] == "train":
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir="~/ray_results/single_policy_new",
+        results_dir="~/ray_results/single_policy_new_w_penalties",
     )
 
 # This is used for simple runs, fx debugging locked states.
