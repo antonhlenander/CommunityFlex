@@ -64,6 +64,7 @@ class PriceUpdate:
     new_price (float):  new price of electricity
     """
     current_price: float
+    current_feedin_price: float
    
 @ph.msg_payload()
 class DummyMsg:

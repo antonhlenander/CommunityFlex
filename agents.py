@@ -212,7 +212,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         return self.MediatorView(
             current_grid_price = self.current_grid_price,
             current_local_price = self.current_local_price,
-            current_feedin_price = self.feedin_price,
+            current_feedin_price = self.current_feedin_price,
             discount = self.type.discount,
             cap_var = self.type.cap_var
             )
@@ -309,7 +309,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             sell_bids=encoded_sell_bids,
             local_price=self.current_local_price,
             grid_price=self.current_grid_price,
-            feedin_price=self.feedin_price,
+            feedin_price=self.current_feedin_price,
             local_tariff=self.current_local_tariff
             )
 
@@ -500,7 +500,7 @@ class StrategicCommunityMediator(ph.StrategicAgent):
             #self.current_grid_price = daily
             self.current_grid_price = self.price_array[sim_step] + self.dso.import_tariffs_winter[hr_idx]
             #self.price_plot.append(self.current_grid_price)
-            self.feedin_price = self.current_grid_price - self.dso.export_tariff
+            self.current_feedin_price = self.price_array[sim_step] - self.dso.export_tariff
             self.current_local_tariff = self.dso.import_tariffs_winter[hr_idx]*(1-self.type.discount)
             #print(f"DAILY RESIDUAL DEMAND: {self.next_residual_demand}")
             #print(f"NEXT CAP LIMITS: {next_cap_limits}")
@@ -632,11 +632,12 @@ class StrategicCommunityMediator(ph.StrategicAgent):
         self.no_different_prices = 0
         self.acc_reward = 0
         self.reward = 0
+        self.penalized_amount = 0
 
         self.price_array = self.dm.get_price_array()
         #self.current_grid_price = self.price_array[0] + self.dso.import_tariffs_winter[0]
         self.current_grid_price = self.price_array[0] + self.dso.import_tariffs_winter[0]
-        self.feedin_price = self.price_array[0] - self.dso.export_tariff
+        self.current_feedin_price = self.price_array[0] - self.dso.export_tariff
         self.current_local_tariff = self.dso.import_tariffs_winter[0]
         # TODO: Let's see what happens if max price is doubled
         self.max_price = self.max_price * 2
@@ -698,9 +699,6 @@ class SimpleCommunityMediator(ph.Agent):#
         self.export_tariff = 0.00375 + 0.000875 + 0.01
 
         # Currents
-        self.current_grid_price: float = 0 # Spot price + import tariff
-        self.current_local_price: float = 0 # Dynamic price set by agent
-        self.feedin_price: float = 0 # Spot price - export tariff
         self.current_local_tariff: float = 0 # Discounted import tariff
     
         self.price_array: list = []
@@ -716,6 +714,7 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_grid_price: float
         self.current_local_price: float 
         self.current_feedin_price: float
+        self.penalized_amount: float = 0
 
         self.total_local_bought: float = 0
         self.current_total_export: float = 0
@@ -753,7 +752,7 @@ class SimpleCommunityMediator(ph.Agent):#
             msgs = []
             for agent in ctx.neighbour_ids:
                 msgs.append(
-                    (agent,PriceUpdate(self.current_local_price),)
+                    (agent,PriceUpdate(self.current_local_price, self.current_feedin_price),)
                 )
             # print(f"-------- Step {ctx.env_view.current_step} CM sending message --------")
             # print(f"Current local price: {self.current_local_price}")
@@ -763,6 +762,7 @@ class SimpleCommunityMediator(ph.Agent):#
     def post_message_resolution(self, ctx: ph.Context) -> None:
         if ctx.env_view.current_step % 2 == 0: 
             sim_step = (ctx.env_view.current_step + 1) // 2
+            self.current_local_tariff = self.import_tariffs[sim_step%24]*(1-self.type.discount)
             self.current_grid_price = self.price_array[sim_step] + self.import_tariffs[sim_step%24]
             self.current_local_price = self.current_grid_price
             self.current_feedin_price = self.price_array[sim_step] - self.export_tariff
@@ -779,7 +779,7 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_feedin_price = self.price_array[0] - self.export_tariff
         self.max_price = self.dm.get_all_max_price() + 2.0666
         self.max_price = self.max_price
-        #self.penalized_amount = 0
+        self.penalized_amount = 0
         self.mediator_netloss = 0
         self.alltime_prosumers_payments = 0
         self.prosumers_netloss = 0
@@ -826,8 +826,8 @@ class SimpleCommunityMediator(ph.Agent):#
             sell_bids=encoded_sell_bids,
             local_price=self.current_local_price,
             grid_price=self.current_grid_price,
-            feedin_price=0,
-            local_tariff=0
+            feedin_price=self.current_feedin_price,
+            local_tariff=self.current_local_tariff
             )
 
         # DECODING
@@ -835,9 +835,10 @@ class SimpleCommunityMediator(ph.Agent):#
         self.current_total_import = 0
         self.current_total_export = 0
         penalty_fraction = 0
+        self.penalized_amount = 0
         
         if total_demand > total_supply:
-            self.current_total_import = total_demand - total_supply
+            self.current_total_import = total_demand
             self.penalized_amount = max(0, self.current_total_import - self.current_cap_limit)
             # Avoid division by zero
             if self.current_total_import > 0:
@@ -929,12 +930,14 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.battery_cap: float = 0
         self.charge_rate: float = 0
 
+        self.current_local_price: float = 0
+        self.current_feedin_price: float = 0
+
         # Agent currents
         self.current_load: float = 0 
         self.current_prod: float = 0
         self.current_charge: float = 0
         self.current_supply: float = 0
-
         self.self_consumption: float = 0
         self.avail_energy: float = 0
         self.surplus_energy: float = 0
@@ -1126,6 +1129,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
     @ph.agents.msg_handler(PriceUpdate)
     def handle_priceupdate(self, _ctx: ph.Context, msg: ph.Message):
         self.current_local_price = msg.payload.current_price
+        self.current_feedin_price = msg.payload.current_feedin_price
 
     @ph.agents.msg_handler(ClearedBuyBid)
     def handle_cleared_buybid(self, _ctx: ph.Context, msg: ph.Message):
@@ -1354,7 +1358,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
         self.all_max_cap = 15
         self.max_price = self.dm.get_all_max_price() + 2.0666
         self.max_price = self.max_price * self.type.price_multiplier
-        self.reward_norm_factor = self.norm_factor * (self.max_price+75) + (self.charge_rate * self.max_price+75) + 5
+        self.reward_norm_factor = self.norm_factor * self.max_price + self.charge_rate * self.max_price + 5 + 75*3
         self.acc_norm_factor = self.dm.get_agent_daily_demand(self.id)*self.max_price
         self.acc_norm_factor = np.sum(self.acc_norm_factor)*365
 

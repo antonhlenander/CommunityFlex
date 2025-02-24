@@ -66,7 +66,7 @@ metrics["env/self_consumption"] = ph.metrics.AggregatedAgentMetric(follower_agen
 metrics["env/current_local_bought"] = ph.metrics.AggregatedAgentMetric(follower_agents, "current_local_bought", group_reduce_action="sum")
 metrics["env/total_loss"] = ph.metrics.AggregatedAgentMetric(follower_agents, "net_loss", group_reduce_action="sum")
 # metrics["CM/budget_balance"] = ph.metrics.SimpleAgentMetric("CM", "budget_balance")
-# metrics["CM/penalized_amount"] = ph.metrics.SimpleAgentMetric("CM", "penalized_amount")
+metrics["CM/penalized_amount"] = ph.metrics.SimpleAgentMetric("CM", "penalized_amount")
 # metrics["CM/no_of_diff_actions"] = ph.metrics.SimpleAgentMetric("CM", "no_different_prices")
 # metrics["CM/mediator_netloss"] = ph.metrics.SimpleAgentMetric("CM", "mediator_netloss")
 # metrics["CM/mediator_payments"] = ph.metrics.SimpleAgentMetric("CM", "alltime_mediator_payments")
@@ -281,7 +281,7 @@ if sys.argv[1] == "train":
         policies=policies,
         metrics=metrics,
         num_workers=4,
-        results_dir="~/ray_results/single_policy_new_w_penalties",
+        results_dir="~/ray_results/single_policy_w_penalties",
     )
 
 # This is used for simple runs, fx debugging locked states.
