@@ -837,21 +837,18 @@ class SimpleCommunityMediator(ph.Agent):#
         penalty_fraction = 0
         self.penalized_amount = 0
         
-        if total_demand > total_supply:
-            self.current_total_import = total_demand
-            self.penalized_amount = max(0, self.current_total_import - self.current_cap_limit)
-            # Avoid division by zero
-            if self.current_total_import > 0:
-                penalty_fraction = self.penalized_amount / self.current_total_import
-            else:
-                total_penalty = 0
+        self.current_total_import = total_demand
+        self.penalized_amount = max(0, self.current_total_import - self.current_cap_limit)
+        # Avoid division by zero
+        if self.current_total_import > 0:
+            penalty_fraction = self.penalized_amount / self.current_total_import
 
         # Create messages for the cleared buy bids
         for cleared_buy_bid in cleared_buy_bids:
             buyer_id, buy_amount, local_amount, grid_amount, prosumer_cost, mediator_cost = cleared_buy_bid
             # Implement penalty logic here
             prosumer_penalized_amount = grid_amount * penalty_fraction
-            prosumer_cost = buy_amount * self.current_grid_price + prosumer_penalized_amount * self.type.dso_penalty
+            prosumer_cost = prosumer_cost + prosumer_penalized_amount * self.type.dso_penalty
 
             msgs.append(
                 (
@@ -992,7 +989,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
                 # Can include type here as well in the future maybe
                 "action_mask": gym.spaces.Box(0, 1, shape=(6,), dtype=np.float32),
 
-                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(8+24,), dtype=np.float32),
+                "observations": gym.spaces.Box(low=-1.0, high=1.0, shape=(9+24,), dtype=np.float32),
             }
         )
 
@@ -1269,6 +1266,7 @@ class StrategicProsumerAgent(ph.StrategicAgent):
             'observations' : np.array([
                     #self.hour / 24,
                     self.current_local_price / self.max_price,
+                    self.current_feedin_price / self.max_price,
                     self.current_load / self.all_max_cap,
                     self.current_prod / self.all_max_cap,
                     self.current_supply / self.all_max_cap,

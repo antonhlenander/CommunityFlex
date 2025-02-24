@@ -32,8 +32,8 @@ class Market():
             # All sell bids were bought locally
             seller_id = bid[0]
             sell_amount = bid[1]
-            local_amount = sell_amount
-            grid_amount = 0
+            local_amount = 0
+            grid_amount = sell_amount
             prosumer_income = sell_amount * feedin_price
             mediator_income = 0
             cleared_sell_bids.append((seller_id, sell_amount, local_amount, grid_amount, prosumer_income, mediator_income))
